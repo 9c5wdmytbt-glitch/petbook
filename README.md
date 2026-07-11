@@ -1,5 +1,17 @@
 # petbook
 
+<p align="center">
+  <a href="https://9c5wdmytbt-glitch.github.io/petbook/">
+    <img src="https://img.shields.io/badge/%E2%96%B6%20LAUNCH%20ARCADE-ffd76a?style=for-the-badge&labelColor=04040c" alt="Launch the arcade">
+  </a>
+</p>
+
+**[Launch the arcade &rarr;](https://9c5wdmytbt-glitch.github.io/petbook/)** — a hub page
+([`index.html`](index.html)) with launch buttons for both games. Direct links:
+[NOVA](https://9c5wdmytbt-glitch.github.io/petbook/nova.html) ·
+[Pac-Man](https://9c5wdmytbt-glitch.github.io/petbook/pacman.html)
+_(links go live once GitHub Pages is enabled)_
+
 ## NOVA (mobile)
 
 An original arcade game built on the Pac-Man loop, redesigned for today's players:
@@ -16,7 +28,7 @@ the hunters flee while you feast on them for chained points (200-400-800-1600 st
 
 ## Pac-Man (mobile)
 
-A touch-friendly Pac-Man game in a single self-contained file: [`index.html`](index.html).
+A touch-friendly Pac-Man game in a single self-contained file: [`pacman.html`](pacman.html).
 No build step or dependencies — open it in any browser, or serve the repo with
 GitHub Pages / any static host and play on your phone.
 
