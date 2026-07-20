@@ -408,10 +408,10 @@ function eatGhost(g) {
   sfx.ghost();
 }
 
+let deathFxDone = false;
 function killPac() {
-  setState('dying', 2.1);
-  sfx.death();
-  try { navigator.vibrate && navigator.vibrate(120); } catch (e) {}
+  setState('dying', 2.6); // 0.5s frozen silence, then the death sequence
+  deathFxDone = false;
 }
 
 function gameOver() {
@@ -422,9 +422,12 @@ function gameOver() {
 /*  Update                                                            */
 /* ------------------------------------------------------------------ */
 function update(dt) {
-  anim += dt;
-  for (const p of popups) p.t -= dt;
-  popups = popups.filter(p => p.t > 0);
+  const deathFreeze = state === 'dying' && stateTimer > 2.1;
+  if (!deathFreeze) {
+    anim += dt;
+    for (const p of popups) p.t -= dt;
+    popups = popups.filter(p => p.t > 0);
+  }
 
   if (state === 'ready') {
     stateTimer -= dt;
@@ -433,6 +436,11 @@ function update(dt) {
   }
   if (state === 'dying') {
     stateTimer -= dt;
+    if (!deathFxDone && stateTimer <= 2.1) {
+      deathFxDone = true;
+      sfx.death();
+      try { navigator.vibrate && navigator.vibrate(120); } catch (e) {}
+    }
     if (stateTimer <= 0) {
       lives--;
       if (lives < 0) { gameOver(); return; }
@@ -582,9 +590,9 @@ function drawPac() {
   let mouth = 0.28 + Math.abs(Math.sin(anim * 9)) * 0.32; // radians (half-angle)
   let scale = 1;
   if (state === 'dying') {
-    const p = 2.1 - stateTimer;
-    if (p > 0.5) {
-      const q = Math.min(1, (p - 0.5) / 1.2);
+    const p = 2.6 - stateTimer;
+    if (p > 1.0) {
+      const q = Math.min(1, (p - 1.0) / 1.2);
       mouth = 0.3 + q * (Math.PI - 0.3);
       if (q >= 1) return;
     } else mouth = 0.28;
@@ -711,7 +719,7 @@ function draw() {
   if (fruitTimer > 0) drawFruit();
 
   if (state !== 'gameover' && state !== 'start') {
-    if (state !== 'dying' || (2.1 - stateTimer) < 0.5) {
+    if (state !== 'dying' || (2.6 - stateTimer) < 1.0) {
       for (const g of ghosts) drawGhost(g);
     }
     drawPac();
@@ -941,6 +949,7 @@ function frame(ts) {
 // debug/testing hook
 window.__pacman = {
   press: (name) => setDesired(DIRS[name]),
+  kill: () => { if (state === 'playing') killPac(); },
   snapshot: () => ({
     state, score, high, lives, level, dots, dotsEaten,
     pac: { x: pac.x, y: pac.y },
