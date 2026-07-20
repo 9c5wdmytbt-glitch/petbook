@@ -284,12 +284,21 @@ function setState(s) {
   if (s === 'menu') updateMenuStats();
 }
 
+function yesterdayKey() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function updateMenuStats() {
-  const db = store.get('daily-' + todayKey(), null);
+  const today = store.get('daily-' + todayKey(), null);
+  const yday = store.get('daily-' + yesterdayKey(), null);
+  const daily = [];
+  if (streak > 0) daily.push('STREAK <b>' + streak + '</b>');
+  if (today !== null) daily.push('TODAY <b>' + today.toLocaleString() + '</b>');
+  if (yday !== null) daily.push('YESTERDAY <b>' + yday.toLocaleString() + '</b>');
   document.getElementById('menuStats').innerHTML =
     'BEST <b>' + best.toLocaleString() + '</b>' +
-    (streak > 0 ? ' &nbsp;&middot;&nbsp; DAILY STREAK <b>' + streak + '</b>' : '') +
-    (db !== null ? ' &nbsp;&middot;&nbsp; TODAY <b>' + db.toLocaleString() + '</b>' : '');
+    (daily.length ? '<br>DAILY &mdash; ' + daily.join(' &nbsp;&middot;&nbsp; ') : '');
 }
 
 /* ================================================================== */
@@ -590,9 +599,7 @@ function finishRun() {
     const prev = store.get(key, null);
     if (prev === null) {
       const last = store.get('lastDaily', '');
-      const y = new Date(); y.setDate(y.getDate() - 1);
-      const yKey = y.getFullYear() + '-' + String(y.getMonth() + 1).padStart(2, '0') + '-' + String(y.getDate()).padStart(2, '0');
-      streak = last === yKey ? streak + 1 : 1;
+      streak = last === yesterdayKey() ? streak + 1 : 1;
       store.set('streak', streak);
       store.set('lastDaily', todayKey());
     }
@@ -861,7 +868,7 @@ document.getElementById('btnMenu').addEventListener('click', () => setState('men
 document.getElementById('btnShare').addEventListener('click', async () => {
   const text = 'NOVA — ' + score.toLocaleString() + ' pts · ×' + bestChain +
     ' chain · ' + fmtTime(time) + ' survived' +
-    (mode === 'daily' ? ' · Daily ' + todayKey() + (streak > 1 ? ' · ' + streak + '-day streak' : '') : '');
+    (mode === 'daily' ? ' · Daily ' + todayKey() + (streak >= 1 ? ' · ' + streak + '-day streak' : '') : '');
   try {
     if (navigator.share) { await navigator.share({ text }); return; }
     await navigator.clipboard.writeText(text);
