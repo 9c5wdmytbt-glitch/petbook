@@ -253,9 +253,12 @@ function grazeMult() {
   return grazeCombo <= 1 ? 1 : grazeCombo === 2 ? 1.5 : grazeCombo === 3 ? 2 : 2.5;
 }
 let motesEaten = 0, grazes = 0;
-let spawnT = 0, surgeT = 40, deathT = 0;
+let spawnT = 0, deathT = 0;
+let wave = 1, waveT = 0, waveLull = false, wavePressure = 0, wavePulse = 0;
+const WAVE_BUILD = 24, WAVE_LULL = 6.5;
 let player, motes = [], shades = [], parts = [], pops = [], rings = [];
 let shadeSeq = 0;
+const dbgSpawns = [];
 let shake = 0, flash = 0, timeScale = 1, anim = 0;
 let banner = null; // {text, t, color}
 
@@ -265,7 +268,9 @@ function newRun(m) {
   score = 0; time = 0; meter = 0; novaT = 0; chainIdx = 0; bestChain = 0;
   combo = 0; comboT = 0; motesEaten = 0; grazes = 0;
   grazeCombo = 0; lastGrazeT = 0; lastNovaClose = false;
-  spawnT = 1.2; surgeT = 40; shake = 0; flash = 0; timeScale = 1;
+  spawnT = 1.2; shake = 0; flash = 0; timeScale = 1;
+  wave = 1; waveT = 0; waveLull = false; wavePressure = 0; wavePulse = 0;
+  dbgSpawns.length = 0;
   player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 9 * S, trail: [] };
   motes = []; shades = []; parts = []; pops = []; rings = [];
   for (let i = 0; i < 12; i++) motes.push(spawnMote());
@@ -315,8 +320,8 @@ function spawnMote() {
 
 function shadeType() {
   const r = rng();
-  if (time > 90 && r < 0.15) return 'hunter';
-  if (time > 40 && r < 0.40) return 'swift';
+  if (wave >= 3 && r < 0.15) return 'hunter';
+  if (wave >= 2 && r < 0.40) return 'swift';
   return 'shade';
 }
 
@@ -331,10 +336,11 @@ function spawnShade(burst, forceType) {
   else { x = W - m; y = rng() * H; }
   const type = forceType || shadeType();
   const spec = {
-    shade:  { speed: (205 + Math.min(time, 150) * 0.5) * S, r: 11 * S, glow: C.shadeGlow, core: '#c9adff', pts: 1 },
-    swift:  { speed: 300 * S, r: 9 * S,  glow: C.swiftGlow, core: '#ffb8e8', pts: 1 },
+    shade:  { speed: (205 + Math.min(115, (wave - 1) * 9 + wavePressure * 22)) * S, r: 11 * S, glow: C.shadeGlow, core: '#c9adff', pts: 1 },
+    swift:  { speed: (300 + Math.min(60, (wave - 1) * 6)) * S, r: 9 * S,  glow: C.swiftGlow, core: '#ffb8e8', pts: 1 },
     hunter: { speed: 255 * S, r: 13 * S, glow: C.huntGlow,  core: '#ffb3a6', pts: 1 },
   }[type];
+  dbgSpawns.push(time); if (dbgSpawns.length > 900) dbgSpawns.shift();
   shades.push({
     id: ++shadeSeq,
     x, y, vx: 0, vy: 0, type, ...spec,
@@ -437,20 +443,28 @@ function update(dt) {
   motes = motes.filter(m => !m.dead);
   while (motes.length < 12) motes.push(spawnMote());
 
-  /* --- spawning --- */
+  /* --- wave pacing: ~24s of building pressure, ~6.5s lull, next wave
+         peaks higher. Cues are ambient (light swell / soft release tone),
+         never text. --- */
+  waveT += gdt;
+  if (!waveLull && waveT >= WAVE_BUILD) {
+    waveLull = true; waveT = 0;
+    sfx.waveLull();
+  } else if (waveLull && waveT >= WAVE_LULL) {
+    waveLull = false; waveT = 0; wave++;
+    wavePulse = 1;
+    for (let i = 0; i < Math.min(2 + wave, 6); i++) spawnShade(true);
+    sfx.waveSwell();
+  }
+  wavePressure = waveLull ? 0 : Math.min(1, waveT / WAVE_BUILD);
+  wavePulse = Math.max(0, wavePulse - gdt * 0.5);
   spawnT -= gdt;
-  const cap = Math.min(34, 6 + time * 0.22);
+  const cap = Math.min(36, 4 + wave * 3 + wavePressure * 5);
   if (spawnT <= 0 && shades.length < cap) {
     spawnShade();
-    spawnT = Math.max(0.8, 3.0 - time * 0.012);
-  }
-  surgeT -= gdt;
-  if (surgeT <= 0) {
-    surgeT = 40;
-    banner = { text: 'SURGE INCOMING', t: 1.6, color: '#ff8f6a' };
-    for (let i = 0; i < 5; i++) spawnShade(true);
-    shake = Math.max(shake, 5);
-    sfx.surge();
+    const startI = Math.max(1.5, 2.8 - wave * 0.1);
+    const peakI = Math.max(0.65, 1.7 - wave * 0.12);
+    spawnT = waveLull ? 4.5 : startI + (peakI - startI) * wavePressure;
   }
 
   /* --- shades --- */
@@ -662,13 +676,14 @@ function draw() {
   ctx.fillRect(-30, -30, W + 60, H + 60);
   ctx.fillStyle = '#fff';
   for (const st of stars) {
-    ctx.globalAlpha = st.a * (0.7 + 0.3 * Math.sin(anim * 0.8 + st.x));
+    ctx.globalAlpha = Math.min(1, st.a * (0.7 + 0.3 * Math.sin(anim * 0.8 + st.x)) * (1 + wavePulse * 1.2));
     ctx.fillRect(st.x, st.y, st.r, st.r);
   }
   ctx.globalAlpha = 1;
 
-  // arena border
-  ctx.strokeStyle = novaT > 0 ? 'rgba(77,125,255,.5)' : 'rgba(120,110,255,.22)';
+  // arena border (brightens briefly as a new wave rolls in)
+  ctx.strokeStyle = novaT > 0 ? 'rgba(77,125,255,.5)'
+    : 'rgba(120,110,255,' + (0.22 + wavePulse * 0.45) + ')';
   ctx.lineWidth = 2;
   ctx.strokeRect(4, 4, W - 8, H - 8);
 
@@ -861,7 +876,8 @@ const sfx = {
   ready()    { tone(660, 660, 0.1, 'triangle', 0.1); tone(990, 990, 0.18, 'triangle', 0.1, 0.11); },
   nova()     { boom(0.35, 0.8); tone(50, 160, 0.6, 'sine', 0.25); },
   eat(i)     { tone(300 * Math.pow(1.4, Math.min(i, 6)), 300 * Math.pow(1.4, Math.min(i, 6)) * 1.6, 0.14, 'square', 0.1); },
-  surge()    { tone(120, 90, 0.4, 'sawtooth', 0.1); tone(120, 90, 0.4, 'sawtooth', 0.1, 0.45); },
+  waveSwell(){ tone(55, 220, 0.9, 'sawtooth', 0.09); },
+  waveLull() { tone(330, 165, 0.7, 'sine', 0.055); },
   death()    { boom(0.3, 0.9); tone(500, 45, 1.1, 'sawtooth', 0.14); },
   start()    { tone(440, 880, 0.25, 'triangle', 0.09); },
   closeCall(){ tone(659, 659, 0.09, 'square', 0.12, 0.05); tone(880, 880, 0.09, 'square', 0.12, 0.15); tone(1319, 1319, 0.22, 'square', 0.12, 0.25); },
@@ -987,12 +1003,14 @@ document.getElementById('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;'
 // debug/testing hook
 window.__nova = {
   snap: () => ({ state, mode, score, best, time, meter, novaT, combo, bestChain,
+                 wave, waveLull, wavePressure,
                  grazeCombo, grazeMult: grazeMult(), lastNovaClose,
                  shades: shades.length, motes: motes.length,
                  player: player ? { x: player.x, y: player.y } : null }),
   motePos: () => motes.map(m => ({ x: m.x, y: m.y })),
   shadePos: () => shades.map(s => ({ id: s.id, x: s.x, y: s.y, fright: s.fright > 0, warn: s.warn > 0, type: s.type, hState: s.hState, v: Math.hypot(s.vx, s.vy) })),
   spawnHunter: () => spawnShade(false, 'hunter'),
+  spawns: () => dbgSpawns.slice(),
   charge: () => { meter = 1; },
   boom: fireNova,
   kill: die,
