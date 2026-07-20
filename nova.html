@@ -78,6 +78,16 @@
   #novaBtn.shown { display: block; }
   #novaBtn.ready { animation: novaPulse .8s ease-in-out infinite; border-color: #ffe9b8; color: #201200;
     background: conic-gradient(#ffd76a 0deg, #ffd76a 360deg); }
+  #grazeMult {
+    position: fixed; z-index: 5; pointer-events: none;
+    right: calc(env(safe-area-inset-right) + 18px);
+    bottom: calc(env(safe-area-inset-bottom) + 108px);
+    width: 84px; text-align: center;
+    font-size: 13px; font-weight: 800; letter-spacing: 1px;
+    color: #b8ffe9; text-shadow: 0 0 10px rgba(120,255,220,.6);
+    opacity: 0; transition: opacity .18s;
+  }
+  #grazeMult.shown { opacity: 1; }
   @keyframes novaPulse {
     50% { transform: scale(1.12); box-shadow: 0 0 34px rgba(255,214,106,.65); }
   }
@@ -104,6 +114,7 @@
 <div id="stage"><canvas id="cv"></canvas></div>
 
 <button id="novaBtn">NOVA</button>
+<div id="grazeMult"></div>
 <button id="muteBtn">&#128266;</button>
 
 <div class="panel" id="menu">
@@ -236,6 +247,10 @@ let mode = 'endless';
 let rng = Math.random;
 let score = 0, time = 0, meter = 0, novaT = 0, chainIdx = 0, bestChain = 0;
 let combo = 0, comboT = 0;
+let grazeCombo = 0, lastGrazeT = 0;
+function grazeMult() {
+  return grazeCombo <= 1 ? 1 : grazeCombo === 2 ? 1.5 : grazeCombo === 3 ? 2 : 2.5;
+}
 let motesEaten = 0, grazes = 0;
 let spawnT = 0, surgeT = 40, deathT = 0;
 let player, motes = [], shades = [], parts = [], pops = [], rings = [];
@@ -247,6 +262,7 @@ function newRun(m) {
   rng = m === 'daily' ? mulberry32([...todayKey()].reduce((a, c) => a * 31 + c.charCodeAt(0) | 0, 7)) : Math.random;
   score = 0; time = 0; meter = 0; novaT = 0; chainIdx = 0; bestChain = 0;
   combo = 0; comboT = 0; motesEaten = 0; grazes = 0;
+  grazeCombo = 0; lastGrazeT = 0;
   spawnT = 1.2; surgeT = 40; shake = 0; flash = 0; timeScale = 1;
   player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 9 * S, trail: [] };
   motes = []; shades = []; parts = []; pops = []; rings = [];
@@ -378,6 +394,7 @@ function update(dt) {
 
   /* --- combo timer --- */
   if (combo > 0) { comboT -= gdt; if (comboT <= 0) combo = 0; }
+  if (grazeCombo > 0 && time - lastGrazeT > 1.5) grazeCombo = 0;
 
   /* --- nova timer --- */
   if (novaT > 0) {
@@ -484,7 +501,8 @@ function update(dt) {
     } else if (sh.fright <= 0 && pd < sh.r + player.r + 30 * S && sh.grazeCD <= 0) {
       sh.grazeCD = 0.9;
       grazes++;
-      addMeter(0.035);
+      grazeCombo++; lastGrazeT = time;
+      addMeter(0.035 * grazeMult());
       addScore(15, player.x, player.y - 20 * S, null, null);
       burst((sh.x + player.x) / 2, (sh.y + player.y) / 2, 3, C.whiteGlow, 160);
       sfx.graze();
@@ -536,6 +554,7 @@ function fireNova() {
 
 function die() {
   state = 'dying'; deathT = 1.2;
+  grazeCombo = 0;
   burst(player.x, player.y, 40, C.playerGlow, 420);
   burst(player.x, player.y, 16, C.whiteGlow, 300);
   rings.push({ x: player.x, y: player.y, r: 6, vr: 700 * S, t: 0.8, w: 3 });
@@ -880,7 +899,16 @@ function tickNovaBtn() {
     novaBtn.classList.toggle('ready', f >= 1);
     novaBtn.textContent = f >= 1 ? 'NOVA' : (novaT > 0 ? '...' : Math.round(f * 100) + '%');
   }
+  const gm = grazeMult();
+  const show = state === 'playing' && grazeCombo >= 2;
+  if (show !== shownGraze || (show && gm !== shownGrazeMult)) {
+    shownGraze = show; shownGrazeMult = gm;
+    grazeMultEl.textContent = 'GRAZE \u00d7' + gm;
+    grazeMultEl.classList.toggle('shown', show);
+  }
 }
+const grazeMultEl = document.getElementById('grazeMult');
+let shownGraze = false, shownGrazeMult = 0;
 
 let last = performance.now();
 function frame(ts) {
@@ -897,6 +925,7 @@ document.getElementById('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;'
 // debug/testing hook
 window.__nova = {
   snap: () => ({ state, mode, score, best, time, meter, novaT, combo, bestChain,
+                 grazeCombo, grazeMult: grazeMult(),
                  shades: shades.length, motes: motes.length,
                  player: player ? { x: player.x, y: player.y } : null }),
   motePos: () => motes.map(m => ({ x: m.x, y: m.y })),
