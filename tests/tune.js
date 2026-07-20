@@ -70,9 +70,13 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
           if (near) {
             const d = Math.hypot(near.x - p.x, near.y - p.y);
             vx = (near.x - p.x); vy = (near.y - p.y); // dive
-            if (d < 70 || s.time - planT > 1.6) {
+            if (d < 65) { // inside the ~66px close-call radius, above contact
               window.__nova.boom();
               setTimeout(() => M.novas.push({ type: 'aggressive', close: window.__nova.snap().lastNovaClose }), 80);
+              novaPlan = null;
+            } else if (s.time - planT > 2.2) {
+              window.__nova.boom();
+              setTimeout(() => M.novas.push({ type: 'bailed', close: window.__nova.snap().lastNovaClose }), 80);
               novaPlan = null;
             }
           } else { window.__nova.boom(); novaPlan = null; }
@@ -115,22 +119,34 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
   const aggClose = agg.filter(n => n.close).length;
   const imm = M.novas.filter(n => n.type === 'immediate');
 
-  // lull relief: spawns/s in lull vs final 8s of each build, using samples
-  let lullRate = null, buildRate = null;
-  const spawnTimes = M.spawnSets.flat();
-  const lullWins = [], buildWins = [];
-  let prev = null;
-  for (const s of M.samples) {
-    if (prev && !prev.lull && s.lull) lullWins.push([s.t, s.t + 6.5]);
-    if (prev && prev.lull && !s.lull) buildWins.push([s.t + 16, s.t + 24]);
-    prev = s;
+  // lull relief: spawns/s in lulls vs the final 8s of builds, computed
+  // strictly per run (time resets on retry - never mix runs)
+  const runsSamples = [[]];
+  for (const smp of M.samples) {
+    const cur = runsSamples[runsSamples.length - 1];
+    if (cur.length && smp.t < cur[cur.length - 1].t) runsSamples.push([]);
+    runsSamples[runsSamples.length - 1].push(smp);
   }
-  const rate = wins => {
-    let n = 0, dur = 0;
-    for (const [a, b] of wins) { n += spawnTimes.filter(t => t >= a && t < b).length; dur += b - a; }
-    return dur ? n / dur : null;
-  };
-  lullRate = rate(lullWins); buildRate = rate(buildWins);
+  let lullN = 0, lullDur = 0, buildN = 0, buildDur = 0;
+  runsSamples.forEach((rs, i) => {
+    const spawnTimes = M.spawnSets[i] || [];
+    let prev = null;
+    for (const smp of rs) {
+      if (prev && !prev.lull && smp.lull) { // lull began
+        // 5.5s window: sampling lag must not let the next wave's opening
+        // burst bleed into the lull measurement
+        lullN += spawnTimes.filter(t => t >= smp.t && t < smp.t + 5.5).length;
+        lullDur += 5.5;
+      }
+      if (prev && prev.lull && !smp.lull) { // next build began
+        buildN += spawnTimes.filter(t => t >= smp.t + 16 && t < smp.t + 24).length;
+        buildDur += 8;
+      }
+      prev = smp;
+    }
+  });
+  const lullRate = lullDur ? lullN / lullDur : null;
+  const buildRate = buildDur ? buildN / buildDur : null;
 
   console.log(JSON.stringify({
     sessionSeconds: SECONDS,
@@ -139,6 +155,7 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
     maxGrazeMult: M.maxGrazeMult,
     samplesAtMult25: M.mult25Hits,
     novasFired: M.novas.length,
+    bailedDives: M.novas.filter(n => n.type === 'bailed').length,
     aggressiveNovas: agg.length,
     aggressiveCloseCalls: aggClose,
     closeCallRateAggressive: agg.length ? (aggClose / agg.length).toFixed(2) : 'n/a',

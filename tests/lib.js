@@ -30,12 +30,13 @@ async function launch() {
 async function installPointer(page) {
   await page.evaluate(() => {
     const stage = document.getElementById('stage');
+    let down = false;
+    // Behave like a real finger: ONE pointerdown, then moves. Re-sending
+    // pointerdown every tick would trigger the game's double-tap nova.
     window.__send = (x, y) => {
-      for (const t of ['pointerdown', 'pointermove']) {
-        stage.dispatchEvent(new PointerEvent(t, {
-          pointerId: 1, isPrimary: true, clientX: x, clientY: y, bubbles: true,
-        }));
-      }
+      const opts = { pointerId: 1, isPrimary: true, clientX: x, clientY: y, bubbles: true };
+      if (!down) { down = true; stage.dispatchEvent(new PointerEvent('pointerdown', opts)); }
+      stage.dispatchEvent(new PointerEvent('pointermove', opts));
     };
   });
 }
