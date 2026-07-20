@@ -1,0 +1,144 @@
+'use strict';
+/* NOVA smoke test: boot, steering, scoring, nova + chain, hunter telegraph,
+   death, retry, daily mode + storage hygiene — and zero console errors. */
+const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
+
+(async () => {
+  const { browser, page, errors } = await launch();
+  await page.goto(BASE_URL + '/nova.html');
+  await page.waitForTimeout(500);
+
+  let snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.state === 'menu', 'boots to menu');
+
+  await page.tap('#btnEndless');
+  await page.waitForTimeout(400);
+  await installPointer(page);
+  snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.state === 'playing', 'endless run starts');
+
+  // Bot: collect motes while avoiding shades for 8s -> score + meter rise
+  await page.evaluate(() => {
+    window.__steer = setInterval(() => {
+      const s = window.__nova.snap();
+      if (s.state !== 'playing' || !s.player) return;
+      const p = s.player;
+      let vx = 0, vy = 0;
+      for (const o of window.__nova.shadePos()) {
+        if (o.warn || o.fright) continue;
+        const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy) || 1;
+        const rr = (o.hState === 'lunge' || o.hState === 'windup') ? 220 : 150;
+        if (d < rr) { const w = (rr - d) / rr * 5; vx += dx / d * w; vy += dy / d * w; }
+      }
+      vx += (195 - p.x) / 400; vy += (422 - p.y) / 400;
+      const motes = window.__nova.motePos();
+      if (motes.length) {
+        let bm = motes[0], bd = 1e9;
+        for (const m of motes) { const d = Math.hypot(m.x - p.x, m.y - p.y); if (d < bd) { bd = d; bm = m; } }
+        vx += (bm.x - p.x) / (bd || 1) * 1.2; vy += (bm.y - p.y) / (bd || 1) * 1.2;
+      }
+      const n = Math.hypot(vx, vy) || 1;
+      window.__send(Math.max(15, Math.min(375, p.x + vx / n * 150)),
+                    Math.max(15, Math.min(829, p.y + vy / n * 150)));
+    }, 90);
+  });
+  await page.waitForTimeout(8000);
+  snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.score > 0, 'collecting motes scores');
+  assert(snap.meter > 0 || snap.novaT > 0, 'meter charges');
+  assert(typeof snap.grazeCombo === 'number' && typeof snap.wave === 'number', 'debug fields present');
+
+  // Hunter telegraph: force one, expect windup >= 0.3s before any lunge
+  const tele = await page.evaluate(() => new Promise(resolve => {
+    window.__nova.spawnHunter();
+    const seen = {};
+    const t0 = performance.now();
+    const iv = setInterval(() => {
+      for (const h of window.__nova.shadePos().filter(x => x.type === 'hunter' && !x.warn)) {
+        if (!seen[h.id]) seen[h.id] = {};
+        if (h.hState === 'windup' && !seen[h.id].windup) seen[h.id].windup = performance.now();
+        if (h.hState === 'lunge' && !seen[h.id].lunge) seen[h.id].lunge = performance.now();
+      }
+      for (const k of Object.keys(seen)) {
+        if (seen[k].lunge) { clearInterval(iv); resolve(seen[k]); return; }
+      }
+      if (performance.now() - t0 > 12000) { clearInterval(iv); resolve(null); }
+    }, 40);
+  }));
+  if (tele) {
+    assert(tele.windup && tele.lunge - tele.windup > 300, 'lunge telegraphed >=0.3s');
+  } else {
+    console.log('note: no hunter lunge within 12s (bot kept distance) — telegraph covered by tune.js');
+  }
+
+  // Nova + chain: dive toward the nearest shade, fire point-blank, feast
+  await page.evaluate(() => {
+    clearInterval(window.__steer);
+    window.__nova.charge();
+    window.__novaFired = false;
+    window.__steer = setInterval(() => {
+      const s = window.__nova.snap();
+      if (s.state === 'gameover') { // died mid-dive: recover and try again
+        document.getElementById('btnRetry').click();
+        setTimeout(() => window.__nova.charge(), 400);
+        return;
+      }
+      if (s.state !== 'playing' || !s.player) return;
+      const p = s.player;
+      if (s.novaT > 0) {
+        window.__novaFired = true;
+        const prey = window.__nova.shadePos().filter(x => x.fright && !x.warn);
+        if (!prey.length) return;
+        prey.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
+        window.__send(prey[0].x, prey[0].y);
+      } else if (s.meter >= 1) {
+        // dive at the nearest slow shade (player outruns 'shade' types) and
+        // fire only point-blank so a catchable prey is guaranteed
+        const hostiles = window.__nova.shadePos().filter(x => !x.warn && !x.fright);
+        const slows = hostiles.filter(x => x.type === 'shade');
+        const near = (slows.length ? slows : hostiles)
+          .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+        if (!near) return;
+        if (Math.hypot(near.x - p.x, near.y - p.y) < 160) { window.__nova.boom(); return; }
+        window.__send(near.x, near.y);
+      }
+    }, 60);
+  });
+  // wait (up to 15s) for the dive to land and the nova to fire
+  let fired = false;
+  for (let i = 0; i < 30 && !fired; i++) {
+    await page.waitForTimeout(500);
+    fired = await page.evaluate(() => window.__novaFired);
+  }
+  assert(fired, 'nova fires');
+  await page.waitForTimeout(6500);
+  snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.bestChain >= 1, 'chain-ate at least one shade during the nova');
+  await page.evaluate(() => clearInterval(window.__steer));
+
+  // Pause via visibility is environment-dependent; test death -> retry
+  await page.evaluate(() => window.__nova.kill());
+  await page.waitForTimeout(1600);
+  snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.state === 'gameover', 'death reaches game over');
+  await page.tap('#btnRetry');
+  await page.waitForTimeout(400);
+  snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.state === 'playing' && snap.score === 0, 'retry restarts clean');
+
+  // Daily mode + storage hygiene
+  await page.evaluate(() => window.__nova.kill());
+  await page.waitForTimeout(1600);
+  await page.tap('#btnMenu');
+  await page.waitForTimeout(200);
+  await page.tap('#btnDaily');
+  await page.waitForTimeout(400);
+  snap = await page.evaluate(() => window.__nova.snap());
+  assert(snap.state === 'playing' && snap.mode === 'daily', 'daily challenge starts');
+  await page.evaluate(() => window.__nova.kill());
+  await page.waitForTimeout(1600);
+  const keys = await page.evaluate(() => Object.keys(localStorage));
+  assert(keys.every(k => k.startsWith('nova-')), 'all storage keys nova- prefixed: ' + keys.join(','));
+
+  await finish(browser, errors, 'nova.test');
+})().catch(e => { console.error('FAIL nova.test:', e.message); process.exit(1); });
