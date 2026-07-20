@@ -248,6 +248,7 @@ let rng = Math.random;
 let score = 0, time = 0, meter = 0, novaT = 0, chainIdx = 0, bestChain = 0;
 let combo = 0, comboT = 0;
 let grazeCombo = 0, lastGrazeT = 0;
+let lastNovaClose = false;
 function grazeMult() {
   return grazeCombo <= 1 ? 1 : grazeCombo === 2 ? 1.5 : grazeCombo === 3 ? 2 : 2.5;
 }
@@ -262,7 +263,7 @@ function newRun(m) {
   rng = m === 'daily' ? mulberry32([...todayKey()].reduce((a, c) => a * 31 + c.charCodeAt(0) | 0, 7)) : Math.random;
   score = 0; time = 0; meter = 0; novaT = 0; chainIdx = 0; bestChain = 0;
   combo = 0; comboT = 0; motesEaten = 0; grazes = 0;
-  grazeCombo = 0; lastGrazeT = 0;
+  grazeCombo = 0; lastGrazeT = 0; lastNovaClose = false;
   spawnT = 1.2; surgeT = 40; shake = 0; flash = 0; timeScale = 1;
   player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 9 * S, trail: [] };
   motes = []; shades = []; parts = []; pops = []; rings = [];
@@ -542,13 +543,30 @@ function burst(x, y, n, color, speed) {
 
 function fireNova() {
   if (state !== 'playing' || meter < 1) return;
-  meter = 0; novaT = 5; chainIdx = 0;
-  for (const s of shades) s.fright = 5;
+  // CLOSE CALL: firing with an enemy inside ~1.5x the graze ring starts the
+  // chain one step up (200 base) and extends the feast window by 20%
+  const dangerR = (player.r + 30 * S) * 1.5;
+  let closeCall = false;
+  for (const sh of shades) {
+    if (sh.warn > 0) continue;
+    if (Math.hypot(sh.x - player.x, sh.y - player.y) < dangerR + sh.r) { closeCall = true; break; }
+  }
+  lastNovaClose = closeCall;
+  const dur = closeCall ? 6 : 5;
+  meter = 0; novaT = dur; chainIdx = closeCall ? 1 : 0;
+  for (const s of shades) s.fright = dur;
   rings.push({ x: player.x, y: player.y, r: 10, vr: 1400 * S, t: 0.7, w: 5 });
   rings.push({ x: player.x, y: player.y, r: 10, vr: 900 * S, t: 0.9, w: 3 });
-  flash = 0.7; shake = 14; timeScale = 0.25;
-  banner = { text: 'FEAST', t: 1.2, color: '#4dd6ff' };
-  vibrate(60);
+  flash = closeCall ? 0.9 : 0.7; shake = closeCall ? 18 : 14; timeScale = 0.25;
+  if (closeCall) {
+    rings.push({ x: player.x, y: player.y, r: 6, vr: 2000 * S, t: 0.55, w: 7 });
+    banner = { text: 'CLOSE CALL', t: 1.5, color: '#ffd76a' };
+    vibrate([40, 40, 60]);
+    sfx.closeCall();
+  } else {
+    banner = { text: 'FEAST', t: 1.2, color: '#4dd6ff' };
+    vibrate(60);
+  }
   sfx.nova();
 }
 
@@ -804,8 +822,9 @@ const sfx = {
   surge()    { tone(120, 90, 0.4, 'sawtooth', 0.1); tone(120, 90, 0.4, 'sawtooth', 0.1, 0.45); },
   death()    { boom(0.3, 0.9); tone(500, 45, 1.1, 'sawtooth', 0.14); },
   start()    { tone(440, 880, 0.25, 'triangle', 0.09); },
+  closeCall(){ tone(659, 659, 0.09, 'square', 0.12, 0.05); tone(880, 880, 0.09, 'square', 0.12, 0.15); tone(1319, 1319, 0.22, 'square', 0.12, 0.25); },
 };
-function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+function vibrate(pattern) { try { navigator.vibrate && navigator.vibrate(pattern); } catch (e) {} }
 
 /* ================================================================== */
 /*  Input                                                             */
@@ -925,7 +944,7 @@ document.getElementById('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;'
 // debug/testing hook
 window.__nova = {
   snap: () => ({ state, mode, score, best, time, meter, novaT, combo, bestChain,
-                 grazeCombo, grazeMult: grazeMult(),
+                 grazeCombo, grazeMult: grazeMult(), lastNovaClose,
                  shades: shades.length, motes: motes.length,
                  player: player ? { x: player.x, y: player.y } : null }),
   motePos: () => motes.map(m => ({ x: m.x, y: m.y })),
