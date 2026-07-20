@@ -255,6 +255,7 @@ function grazeMult() {
 let motesEaten = 0, grazes = 0;
 let spawnT = 0, surgeT = 40, deathT = 0;
 let player, motes = [], shades = [], parts = [], pops = [], rings = [];
+let shadeSeq = 0;
 let shake = 0, flash = 0, timeScale = 1, anim = 0;
 let banner = null; // {text, t, color}
 
@@ -319,7 +320,7 @@ function shadeType() {
   return 'shade';
 }
 
-function spawnShade(burst) {
+function spawnShade(burst, forceType) {
   // spawn from a random edge with a telegraphed warning
   const edge = (rng() * 4) | 0;
   const m = 26 * S;
@@ -328,17 +329,19 @@ function spawnShade(burst) {
   else if (edge === 1) { x = rng() * W; y = H - m; }
   else if (edge === 2) { x = m; y = rng() * H; }
   else { x = W - m; y = rng() * H; }
-  const type = shadeType();
+  const type = forceType || shadeType();
   const spec = {
     shade:  { speed: (205 + Math.min(time, 150) * 0.5) * S, r: 11 * S, glow: C.shadeGlow, core: '#c9adff', pts: 1 },
     swift:  { speed: 300 * S, r: 9 * S,  glow: C.swiftGlow, core: '#ffb8e8', pts: 1 },
     hunter: { speed: 255 * S, r: 13 * S, glow: C.huntGlow,  core: '#ffb3a6', pts: 1 },
   }[type];
   shades.push({
+    id: ++shadeSeq,
     x, y, vx: 0, vy: 0, type, ...spec,
     warn: burst ? 1.0 : 0.75,
     fright: novaT > 0 ? novaT : 0,
     grazeCD: 0, wob: rng() * 6.28,
+    hState: 'stalk', hT: 1.2, lvx: 0, lvy: 0,
   });
 }
 
@@ -455,14 +458,39 @@ function update(dt) {
     if (sh.warn > 0) { sh.warn -= gdt; continue; }
     if (sh.fright > 0) sh.fright -= gdt;
     sh.wob += gdt * 5;
-    // target: hunters lead the player
+    // hunter attack cycle: stalk -> 0.4s telegraphed wind-up -> locked lunge.
+    // The lunge direction is fixed at launch, so a sidestep during the
+    // wind-up beats it: getting hit means the warning was ignored.
+    if (sh.type === 'hunter') {
+      if (sh.fright > 0) { sh.hState = 'stalk'; sh.hT = Math.max(sh.hT, 1.0); }
+      else {
+        sh.hT -= gdt;
+        const hd = Math.hypot(player.x - sh.x, player.y - sh.y);
+        if (sh.hState === 'stalk' && sh.hT <= 0 && hd < 300 * S) {
+          sh.hState = 'windup'; sh.hT = 0.4;
+          sfx.hunterWind();
+        } else if (sh.hState === 'windup' && sh.hT <= 0) {
+          sh.hState = 'lunge'; sh.hT = 0.55;
+          const lx = player.x + player.vx * 0.5 - sh.x;
+          const ly = player.y + player.vy * 0.5 - sh.y;
+          const ld = Math.hypot(lx, ly) || 1;
+          sh.lvx = lx / ld * 520 * S; sh.lvy = ly / ld * 520 * S;
+        } else if (sh.hState === 'lunge' && sh.hT <= 0) {
+          sh.hState = 'stalk'; sh.hT = 1.8; // cooldown before the next wind-up
+        }
+      }
+    }
     let tx = player.x, ty = player.y;
-    if (sh.type === 'hunter') { tx += player.vx * 0.55; ty += player.vy * 0.55; }
     let ax = tx - sh.x, ay = ty - sh.y;
     const ad = Math.hypot(ax, ay) || 1;
     let sp = sh.speed;
     if (sh.fright > 0) { ax = -ax; ay = -ay; sp *= 0.55; }
     let dvx = ax / ad * sp, dvy = ay / ad * sp;
+    if (sh.type === 'hunter' && sh.fright <= 0) {
+      if (sh.hState === 'windup') { dvx = sh.vx * 0.1; dvy = sh.vy * 0.1; } // hold course, bleed speed
+      else if (sh.hState === 'lunge') { dvx = sh.lvx; dvy = sh.lvy; }
+      else { dvx *= 0.85; dvy *= 0.85; }
+    }
     // separation
     for (const o of shades) {
       if (o === sh || o.warn > 0) continue;
@@ -473,7 +501,7 @@ function update(dt) {
         dvy += oy / od * 140 * S * (1 - od / (30 * S));
       }
     }
-    const se = Math.min(1, 2.6 * gdt);
+    const se = Math.min(1, (sh.type === 'hunter' && sh.fright <= 0 && sh.hState !== 'stalk' ? (sh.hState === 'lunge' ? 9 : 6) : 2.6) * gdt);
     sh.vx += (dvx - sh.vx) * se;
     sh.vy += (dvy - sh.vy) * se;
     sh.x += sh.vx * gdt;
@@ -669,6 +697,13 @@ function draw() {
     const flick = fr && sh.fright < 1.5 && Math.floor(sh.fright * 6) % 2 === 0;
     const g = fr ? (flick ? C.whiteGlow : C.frightGlow) : sh.glow;
     const wob = 1 + Math.sin(sh.wob) * 0.08;
+    if (sh.type === 'hunter' && !fr && sh.hState === 'windup') {
+      const wp = 1 - sh.hT / 0.4;
+      drawGlow(C.huntGlow, sh.x, sh.y, sh.r * (3.5 + wp * 4.5));
+      ctx.strokeStyle = 'rgba(255,130,100,' + (0.35 + 0.55 * wp) + ')';
+      ctx.lineWidth = 2 + wp * 2.5;
+      ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r * (2.8 - wp * 1.3), 0, 7); ctx.stroke();
+    }
     drawGlow(g, sh.x, sh.y, sh.r * 3.2 * wob);
     ctx.fillStyle = fr ? (flick ? '#eef4ff' : '#9db8ff') : sh.core;
     ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r * wob, 0, 7); ctx.fill();
@@ -830,6 +865,7 @@ const sfx = {
   death()    { boom(0.3, 0.9); tone(500, 45, 1.1, 'sawtooth', 0.14); },
   start()    { tone(440, 880, 0.25, 'triangle', 0.09); },
   closeCall(){ tone(659, 659, 0.09, 'square', 0.12, 0.05); tone(880, 880, 0.09, 'square', 0.12, 0.15); tone(1319, 1319, 0.22, 'square', 0.12, 0.25); },
+  hunterWind(){ tone(170, 700, 0.36, 'sawtooth', 0.07); },
 };
 function vibrate(pattern) { try { navigator.vibrate && navigator.vibrate(pattern); } catch (e) {} }
 
@@ -955,7 +991,8 @@ window.__nova = {
                  shades: shades.length, motes: motes.length,
                  player: player ? { x: player.x, y: player.y } : null }),
   motePos: () => motes.map(m => ({ x: m.x, y: m.y })),
-  shadePos: () => shades.map(s => ({ x: s.x, y: s.y, fright: s.fright > 0, warn: s.warn > 0 })),
+  shadePos: () => shades.map(s => ({ id: s.id, x: s.x, y: s.y, fright: s.fright > 0, warn: s.warn > 0, type: s.type, hState: s.hState, v: Math.hypot(s.vx, s.vy) })),
+  spawnHunter: () => spawnShade(false, 'hunter'),
   charge: () => { meter = 1; },
   boom: fireNova,
   kill: die,
