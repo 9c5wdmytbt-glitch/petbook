@@ -22,6 +22,9 @@ motes to charge your nova, graze the swarm for bonus charge — then unleash it 
 the hunters flee while you feast on them for chained points (200-400-800-1600 style).
 
 - One-thumb drag steering, near-miss "graze" risk-reward, charge-and-reversal core loop
+- Graze combos multiply charge rate; point-blank **CLOSE CALL** novas boost the feast
+- Wave-based pacing: pressure builds, a brief lull, then a higher peak — with
+  telegraphed hunter lunges you can sidestep
 - Juice: particles, shockwaves, hit-stop slow-mo, screen shake, haptics, synth audio
 - Short runs with instant restart, endless mode + seeded **Daily Challenge** with streaks
 - Share button (native share sheet / clipboard), persistent best score
@@ -34,7 +37,7 @@ GitHub Pages / any static host and play on your phone.
 
 **Controls**
 
-- **Mobile:** swipe anywhere on the maze, or use the on-screen d-pad
+- **Mobile:** swipe anywhere on the maze (late swipes forgive — corners cut cleanly), or use the on-screen d-pad
 - **Desktop:** arrow keys or WASD, `P`/`Space` to pause
 
 **Features**
@@ -44,3 +47,9 @@ GitHub Pages / any static host and play on your phone.
   scatter/chase cycles, frightened mode, and eyes returning to the ghost house
 - Levels with increasing speed and shrinking frightened time, extra life at 10,000
 - Score popups, sounds (mutable), pause, and a persistent high score
+
+## Tests
+
+A Playwright smoke suite lives in [`tests/`](tests/) — see
+[`tests/README.md`](tests/README.md). `npm test` serves the repo statically
+and exercises both games and the hub, failing on any console error.

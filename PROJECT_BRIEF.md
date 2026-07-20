@@ -1,5 +1,5 @@
 # PROJECT BRIEF — Petbook Arcade
-Date: 2026-07-20
+Date: 2026-07-20 (updated after batch 2)
 
 ## 1. Purpose & Business Context
 - A mobile-first browser arcade containing two complete games: a faithful Pac-Man
@@ -7,199 +7,161 @@ Date: 2026-07-20
   loop (hunted → charge a power-up → reversal → feast) for today's players.
   Everything is plain HTML/CSS/JavaScript with zero dependencies and zero build
   step — each game is one self-contained file that runs in any modern browser.
-- Target users: casual mobile players. Games are tuned for one-thumb play
-  (swipe / drag / on-screen d-pad), short sessions, and instant restart, with
-  desktop keyboard support as a secondary path.
-- Current stage: **MVP, feature-complete and smoke-tested**. The code is done and
-  pushed; public hosting is the only unfinished step (see §10).
+- Target users: casual mobile players. One-thumb play (swipe / drag / d-pad),
+  short sessions, instant restart; desktop keyboard supported.
+- Current stage: **live in production** at
+  https://9c5wdmytbt-glitch.github.io/petbook/ via GitHub Pages, with a
+  committed QA suite and two rounds of gameplay polish shipped.
 - Note: the repository is named `petbook`, but it contains no pet-related code —
   it was an empty repo (README only) that this arcade was built into.
 
 ## 2. Tech Stack
 - **Frontend:** Vanilla HTML5 / CSS3 / JavaScript (ES2017+, `'use strict'`).
-  No frameworks, no npm packages, no build step, no external assets — a strict
+  No frameworks, no runtime dependencies, no external assets — a strict
   self-containment constraint so the pages also run under claude.ai's Artifact
   CSP, which blocks all external requests.
-- **Rendering:** Canvas 2D with `devicePixelRatio` scaling (capped ×2–×3);
-  pre-rendered offscreen canvases for expensive visuals (maze walls, radial
-  glow sprites); additive (`lighter`) compositing for the NOVA glow aesthetic.
-- **Audio:** Web Audio API, fully synthesised at runtime (oscillators + one
-  generated noise buffer) — no audio files. Unlocked on first user gesture as
-  required by mobile browsers.
-- **Input:** Touch events (Pac-Man swipe + d-pad), Pointer events (NOVA drag
-  steering, second-finger / double-tap nova trigger), keyboard fallback
-  (arrows/WASD, P/Space). `navigator.vibrate` haptics where supported.
-- **Backend / database / ORM:** None. There is no server-side code at all.
-- **Third-party runtime services:** None. `navigator.share` and clipboard are
-  used for the NOVA share card; `localStorage` for persistence.
-- **Dev/test tooling (not committed):** `playwright-core` driving the
-  pre-installed Chromium, used from the session scratchpad for automated
-  smoke tests. Not part of the repo.
-- **Hosting/CI:** GitHub Pages via GitHub Actions
-  (`.github/workflows/pages.yml`): checkout → `actions/configure-pages@v5`
-  (`enablement: true`) → `upload-pages-artifact@v3` (repo root) →
-  `deploy-pages@v4`, on push to `main` / the working branch, plus manual
-  dispatch. **Not yet live** — see §10.
+- **Rendering:** Canvas 2D with `devicePixelRatio` scaling; pre-rendered
+  offscreen canvases for maze walls and glow sprites; additive compositing for
+  NOVA's look.
+- **Audio:** Web Audio API, fully synthesised (oscillators + generated noise);
+  unlocked on first user gesture.
+- **Input:** Touch (swipe + d-pad in Pac-Man), Pointer events (drag steering,
+  second-finger / double-tap nova in NOVA), keyboard fallback, vibration
+  haptics where supported.
+- **Backend / database / ORM:** None. No server-side code.
+- **Testing:** committed Playwright smoke suite in `tests/` (playwright-core,
+  `npm test`), driven through in-game debug hooks; plus an optional bot-driven
+  tuning harness (`tests/tune.js`).
+- **Hosting/CI:** GitHub Pages via `.github/workflows/pages.yml`
+  (checkout → configure-pages → upload repo root → deploy) on push to `main`
+  (and the original feature branch) plus manual dispatch. Live since run #8;
+  every subsequent `main` push redeploys automatically.
 
 ## 3. Architecture
-- **Static multi-page site; each page is a self-contained monolith.** No shared
-  code between pages (deliberate: each file must work standalone when copied,
-  attached, or published as an artifact). No routing beyond plain `<a href>`
-  navigation from the hub.
+- **Static multi-page site; each page a self-contained monolith** (deliberate:
+  files must work standalone when copied or published as artifacts). Plain
+  `<a href>` navigation from the hub.
 - Directory structure:
-  - `index.html` — arcade hub / launcher: two game cards with LAUNCH buttons (108 lines)
-  - `pacman.html` — complete Pac-Man game: maze, 4-ghost AI, levels, sound (935 lines)
-  - `nova.html` — complete NOVA game: arena, swarm AI, nova mechanic, daily mode (913 lines)
-  - `README.md` — project description, controls, feature lists, launch links
-  - `.github/workflows/pages.yml` — GitHub Pages deploy workflow
-- **Data flow (per game page):** single `requestAnimationFrame` loop →
-  `update(dt)` (fixed-clamped delta; input → entity movement → collisions →
-  scoring/state machine) → `draw()` (full-canvas redraw) → lightweight DOM HUD
-  sync. State machines: Pac-Man `start → ready → playing → dying/levelclear →
-  gameover`; NOVA `menu → playing → dying → gameover` (+ `paused` in both,
-  auto-pause on `visibilitychange`).
-- **Game logic highlights:**
-  - Pac-Man: 28×31 tile maze as a string map; tile-centre grid movement with
-    buffered turns; authentic ghost personalities (Blinky chase, Pinky ambush,
-    Inky flank, Clyde shy) with scatter/chase schedule, frightened mode, and
-    eyes-return-to-house; tunnel wrap; fruit; 10k extra life.
-  - NOVA: continuous-space steering (pointer-seek with easing); swarm AI
-    (seek + separation, three enemy types incl. a predictive "hunter");
-    graze detection ring; charge meter; nova reversal with chain scoring
-    (100→1600); hit-stop slow-mo, screen shake, particles; seeded daily mode
-    (mulberry32 over the date string) with streak tracking.
-- **Authentication / authorisation:** None. No accounts, no sessions, no PII.
+  - `index.html` — arcade hub / launcher with LAUNCH buttons for both games
+  - `pacman.html` — complete Pac-Man (~960 lines)
+  - `nova.html` — complete NOVA (~990 lines)
+  - `tests/` — QA suite (static server, three smoke tests, tuning harness, README)
+  - `.github/workflows/pages.yml` — Pages deploy workflow
+  - `README.md`, `PROJECT_BRIEF.md` — docs
+- **Game loop (both):** single rAF loop → `update(dt)` (input → movement →
+  collisions → state machine) → `draw()` → DOM HUD sync.
+- **Pac-Man specifics:** 28×31 string-map maze; tile-centre grid movement with
+  buffered turns plus late-swipe corner forgiveness (a perpendicular swipe up
+  to ~half a tile after an intersection executes retroactively, overshoot
+  carried into the turn); authentic four-ghost AI (chase/ambush/flank/shy,
+  scatter-chase schedule, frightened, eyes-return); death opens with a 0.5s
+  full freeze; level clear = ghosts vanish + 4-5 wall flashes in 2.0s.
+- **NOVA specifics:** continuous-space steering; wave-based difficulty
+  (~24s build / ~6.5s lull cycles, each wave peaking higher; swifts from wave 2,
+  hunters from wave 3); hunters attack in telegraphed cycles (stalk → 0.4s
+  flare + audio wind-up with hard braking → straight lunge locked at launch →
+  cooldown); graze ring charges the nova, with a rolling-1.5s graze combo
+  scaling charge ×1→×2.5; CLOSE CALL bonus (nova fired with an enemy inside
+  ~1.5× graze ring: chain starts at 200, feast +20% longer); chain scoring
+  100→1600; seeded daily challenge with streaks; share card.
+- **Authentication / authorisation:** None. No accounts, no PII.
 
 ## 4. Data Model
 No database. All persistence is browser `localStorage`, per-device:
-- Pac-Man: `pacman-high` (int high score), `pacman-muted` ('1'/'0')
-- NOVA (all JSON via a small `store` wrapper, `nova-` prefix):
-  `nova-best` (int), `nova-muted` (bool), `nova-streak` (int),
-  `nova-lastDaily` (YYYY-MM-DD of last daily played),
-  `nova-daily-<YYYY-MM-DD>` (int, best score for that day's seeded run)
-- Nothing unusual: no soft deletes, tenancy, or audit concerns — data never
-  leaves the device.
+- Pac-Man: `pacman-high` (int), `pacman-muted` ('1'/'0')
+- NOVA (JSON via a `store` wrapper, `nova-` prefix): `nova-best`, `nova-muted`,
+  `nova-streak`, `nova-lastDaily` (YYYY-MM-DD), `nova-daily-<YYYY-MM-DD>`
+  (per-day best; yesterday's value feeds the menu display)
 
 ## 5. Features — Current State
 | Feature | Status | Notes |
 |---|---|---|
-| Pac-Man: maze, pellets, power pellets, fruit, tunnel | Done | Smoke-tested in mobile-viewport Chromium |
-| Pac-Man: 4-ghost AI (scatter/chase/frightened/eyes) | Done | Classic targeting rules incl. Inky vector math |
-| Pac-Man: swipe + d-pad + keyboard controls | Done | D-pad shown on coarse pointers only |
-| Pac-Man: levels, lives, extra life, high score | Done | High score persists |
-| NOVA: drag steering, motes, combo chains | Done | Bot-driven test collected motes, built combos |
-| NOVA: graze mechanic + charge meter | Done | Verified meter fill via grazes in test |
-| NOVA: nova reversal + chain feast (100→1600) | Done | Verified ×5 chain in automated run |
-| NOVA: three enemy types, surge waves, difficulty ramp | Done | Hunter leads target by velocity |
-| NOVA: endless + seeded Daily Challenge + streaks | Done | Same seed worldwide per calendar day |
-| NOVA: share button (native sheet / clipboard) | Done | Untested on real iOS share sheet |
-| Both: synth audio + mute, haptics, auto-pause | Done | Audio requires first-gesture unlock |
-| Arcade hub with LAUNCH buttons | Done | Navigation to both games verified |
-| GitHub Pages deployment | **Broken/Blocked** | Workflow correct; all 4 runs failed because the repo is private (see §10) |
-| claude.ai Artifact publishing | Done, limited | Both games published; viewable only when signed in to claude.ai on the web |
-| PWA (installable, offline cache) | Planned | Not started; pages already work offline once loaded |
-
-Untested areas: real-device iOS Safari (all testing was emulated-mobile
-Chromium), `navigator.share` on device, long-session performance on low-end
-phones, NOVA difficulty balance beyond ~2 minutes of play.
+| Pac-Man: maze, pellets, fruit, tunnel, 4-ghost AI, levels | Done | Covered by tests/pacman.test.js |
+| Pac-Man: swipe + d-pad + keyboard, late-swipe corner forgiveness | Done | Corner cut asserted to snap to corridor centre |
+| Pac-Man: 0.5s death freeze, level-clear flash celebration | Done | Timing + pixel-sampled in tests |
+| NOVA: steering, motes, combos, graze ring | Done | |
+| NOVA: graze combo (×1→×2.5 charge) with HUD readout | Done | ×2.5 never observed in bot play — see §10 |
+| NOVA: CLOSE CALL bonus + flourish | Done | 5/5 on deliberate point-blank dives, 1/5 incidental |
+| NOVA: telegraphed hunter lunges | Done | All observed lunges preceded by ~0.4s wind-up |
+| NOVA: wave pacing (build/lull, ambient cues) | Done | Lull ≈36% lower spawn rate than late build |
+| NOVA: daily challenge, streaks, share card | Done | Menu shows streak / today / yesterday |
+| Arcade hub with LAUNCH buttons | Done | |
+| GitHub Pages deployment | **Live** | Auto-deploys on push to main; run #10 green |
+| Committed QA suite (`npm test`) | Done | 3 suites, all green; fails on any console error |
+| PWA (installable, offline cache) | Planned | Not started |
 
 ## 6. API Surface
-Not applicable — there is no server and no HTTP API. The only "surface" is the
-three static pages. Each game exposes a small `window.__pacman` / `window.__nova`
-debug object (read-only snapshots + test triggers) used by the automated tests;
-harmless in production but present.
+Not applicable — static pages only. Each game exposes a debug hook
+(`window.__pacman`, `window.__nova`) with read-only snapshots and test-only
+triggers (press/kill/winLevel; charge/boom/kill/spawnHunter/spawns). Harmless
+in production; used by the QA suite.
 
 ## 7. Security Posture
-- **Secrets:** none exist in the codebase — no keys, tokens, or config. The
-  Pages workflow uses only the ephemeral `GITHUB_TOKEN` provided by Actions
-  with explicitly scoped permissions (`contents: read`, `pages: write`,
-  `id-token: write`).
-- **Attack surface:** static files only; no user input is stored or transmitted;
-  no cookies; no third-party scripts. `localStorage` reads are wrapped in
-  try/catch and `JSON.parse` is applied only to values this app wrote.
-- **Transport:** GitHub Pages serves over HTTPS by default once live.
-- **Known gaps:** none material for a static arcade. The debug hooks noted in
-  §6 allow score manipulation client-side, which is inherent to any client-only
-  game (high scores are per-device and not authoritative anywhere).
+- No secrets anywhere; the workflow uses the ephemeral `GITHUB_TOKEN` with
+  scoped permissions (`contents: read`, `pages: write`, `id-token: write`).
+- Static files; no data leaves the device; `localStorage` access wrapped in
+  try/catch. HTTPS via GitHub Pages.
+- Known gaps: none material. Debug hooks allow client-side score manipulation,
+  inherent to any client-only game (scores are per-device, not authoritative).
 
 ## 8. Testing & Quality
-- **What exists:** automated Playwright smoke tests (session scratchpad, not
-  committed) covering: game boot, state transitions, touch/pointer input
-  simulation, score/meter progression, Pac-Man death + life loss, NOVA nova
-  firing (button, double-tap) and chain eating via a mote-seeking/shade-dodging
-  bot, pause, retry, daily mode, and console-error assertions (zero errors on
-  final runs). Visual review via screenshots at each milestone.
-- **What doesn't exist:** no unit tests, no committed test suite, no CI test
-  job, no real-device testing, no cross-browser matrix (Chromium only).
-- **Known bugs:** none currently known. Two visual bugs found during
-  development (Pac-Man HUD score not updating live; NOVA CHAIN/NOVA HUD text
-  overlap + unreadable empty nova button) were fixed and re-verified.
+- **Committed:** `tests/` Playwright suite (`npm test`) — pacman, nova, hub;
+  all green. Serves the repo root from a separate server process; every test
+  fails on any console/page error. `tests/tune.js` runs bot-driven balance
+  sessions.
+- **Not covered:** real-device iOS Safari (all testing is emulated-mobile
+  Chromium), `navigator.share` on device, NOVA behaviour past wave 4 (~90s+ —
+  bots rarely survive that long), long-session performance on low-end phones.
+- **Known bugs:** none currently known.
 - **Technical debt (specific):**
-  - Test scripts live outside the repo; committing them under `tests/` with a
-    package.json would make QA reproducible.
-  - ~150 lines of near-duplicated boilerplate between the two games (audio
-    engine, storage wrapper, resize logic) — acceptable at 2 games, worth
-    extracting if a third is added.
-  - `actions/checkout@v4` / `configure-pages@v5` emit Node 20 deprecation
-    warnings on GitHub's runners; bump when v5/v6 majors land.
-- **TODO/FIXME comments in code:** none (verified by grep).
+  - ~150 lines of near-duplicated boilerplate between the two games (audio,
+    storage, resize) — acceptable at 2 games, extract if a third is added.
+  - GitHub Actions checkout/configure-pages emit Node 20 deprecation warnings;
+    bump the action majors when released.
+- **TODO/FIXME comments:** none.
 
 ## 9. Environment & Deployment
-- **Run locally:** no install or env vars needed. Either open any of the three
-  `.html` files directly in a browser, or serve statically, e.g.
-  `python3 -m http.server 8000` then visit `http://localhost:8000/`.
-- **Run the smoke tests (optional):** `npm i playwright-core` anywhere, point
-  it at a Chromium binary, and drive `pacman.html` / `nova.html` via their
-  `window.__pacman` / `window.__nova` hooks.
-- **Deployment (intended):** merge/keep files on a deployable branch → the
-  `pages.yml` workflow uploads the repo root to GitHub Pages →
-  site at `https://9c5wdmytbt-glitch.github.io/petbook/` (hub), with
-  `/pacman.html` and `/nova.html` as direct game URLs. Also deployable to any
-  static host (Netlify/Vercel/S3) by copying the three HTML files.
-- **Current deployment state:** workflow present and syntactically verified;
-  every run so far fails at `configure-pages` with "Resource not accessible by
-  integration" because **GitHub Pages cannot be enabled on a private repo on a
-  free plan**.
+- **Run locally:** open any `.html` directly, or `python3 -m http.server 8000`.
+  No env vars, no build.
+- **Run tests:** `cd tests && npm install && CHROMIUM_PATH=<chromium> npm test`
+  (see `tests/README.md`).
+- **Deployment:** push to `main` → Pages workflow deploys the repo root →
+  live at `https://9c5wdmytbt-glitch.github.io/petbook/` (hub), with
+  `/pacman.html` and `/nova.html` direct. `tests/` deploys as inert static
+  files. Note: the `github-pages` environment only accepts deploys from the
+  default branch (`main`).
 
 ## 10. Open Decisions & Risks
-- **Blocking:** repo visibility. Pages requires `petbook` to be public (or a
-  paid GitHub plan). The owner has attempted the switch from mobile several
-  times without it completing (the typed-confirmation step is easy to abandon);
-  as of this brief the API still reports `private: true`. This session's
-  credentials cannot flip visibility (proxy policy blocks repository-settings
-  writes) and cannot create an alternative public repo (integration scoped to
-  this repo only) — so the switch must be completed by the owner in a browser.
-- **Decision pending:** merge the working branch
-  (`claude/pacman-mobile-game-tsx383`) to `main` — an open PR (#1) exists.
-  The Pages workflow already triggers on both branches, so this is tidiness,
-  not a blocker.
-- **Decision pending:** whether hosting should instead live in a separate
-  public `petbook-arcade` repo to keep `petbook` private (owner approved this
-  once, but it proved impossible from this session; would need the owner to
-  create the repo or grant broader credentials).
-- **Risk (low):** claude.ai Artifact links confuse on mobile — private
-  artifacts show a 404/sign-in to browsers without a claude.ai web session.
-  Not a product risk once Pages is live.
-- **Risk (low):** NOVA difficulty tuning is based on bot runs and brief manual
-  review, not real-player data.
+- **Tuning decisions awaiting human play-test (flagged, deliberately not
+  auto-tuned):**
+  1. Graze combo ×2.5 was never reached in bot sessions (max ×2). Achieving it
+     needs 4 grazes in rolling 1.5s windows across ≥3 distinct shades (0.9s
+     per-shade cooldown). Options: widen window to ~2s, cut per-shade cooldown
+     to ~0.6s, or accept ×2.5 as aspirational.
+  2. CLOSE CALL is deterministic for deliberate point-blank novas (5/5) and
+     ~1-in-5 incidental. If a 1-in-3..1-in-5 rate for aggressive-but-imperfect
+     play is preferred, shrink the danger radius ~20%.
+  3. Wave lull reads as a ~36% spawn-rate drop; if human play wants more
+     relief, raise the lull spawn interval (4.5s → 6s).
+- **Risk (low):** claude.ai artifact copies of the games require re-publishing
+  manually after changes (last refreshed after batch 2; in sync as of this
+  brief).
+- **Risk (low):** difficulty beyond wave 4 is extrapolated, not observed.
 
 ## 11. Recent Work & Next Steps
-Recent work (this session, newest first):
-1. Arcade hub `index.html` with LAUNCH buttons; Pac-Man moved to `pacman.html`;
-   README launch badge (commit `6a42c69`).
-2. GitHub Pages workflow added (`dc6a837`); four deploy attempts, all blocked
-   by repo visibility.
-3. NOVA built, tested, and fixed (HUD overlap, nova button) (`23c4061`).
-4. Pac-Man built and tested; live-HUD fix (`1cc6390`).
-5. Both games published as claude.ai Artifacts; multiple rounds of
-   mobile-access troubleshooting (in-app browser auth, file viewer showing
-   source instead of rendering).
+Recent work (batch 2, newest first — one commit per item):
+1. `b4f6742` tests: pointer-helper + tuning-harness measurement fixes
+2. `f4f19dd` committed QA suite under `tests/`
+3. `fde0f41` Pac-Man level-clear celebration
+4. `177a0e9` Pac-Man half-second death freeze
+5. `8b2f190` NOVA wave-based difficulty pacing
+6. `6df94fb` NOVA telegraphed hunter lunges
+Earlier (batch 1): corner forgiveness, graze combo, CLOSE CALL, daily hook;
+before that: both games, hub, Pages deploy (live since run #8).
 
 Next steps, in priority order:
-1. **Owner completes the repo visibility switch to Public** (sole blocker).
-2. Re-run `pages.yml` (manual dispatch), confirm green, verify the three URLs
-   load, and share the launch link.
-3. Merge PR #1 to `main` so Pages tracks the default branch.
-4. Commit the Playwright smoke tests into `tests/` for repeatable QA.
-5. Tune NOVA difficulty from real play feedback; consider a PWA manifest +
-   service worker so both games install to the home screen.
+1. Human play-test to settle the three flagged tuning decisions (§10).
+2. PWA manifest + service worker so both games install to the home screen.
+3. Real-device iOS Safari pass (share sheet, haptics, audio unlock, safe areas).
+4. Consider a shared `arcade.js` if a third game is added.
+5. Optional: exclude `tests/` from the deployed artifact for tidiness.
