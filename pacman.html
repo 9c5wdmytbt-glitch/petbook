@@ -821,9 +821,32 @@ const sfx = {
 /* ------------------------------------------------------------------ */
 function setDesired(d) {
   pac.desired = d;
-  if (state === 'playing' && pac.dir && d.x === -pac.dir.x && d.y === -pac.dir.y) {
+  if (state !== 'playing' || !pac.dir) return;
+  if (d.x === -pac.dir.x && d.y === -pac.dir.y) {
     pac.dir = d; pac.lastDir = d; // reverse instantly, anywhere
+    return;
   }
+  tryCornerCut(d);
+}
+
+// Late-turn forgiveness: a swipe that lands just after Pac-Man has passed the
+// intersection where it applies (up to ~half a tile / well under 150ms at pac
+// speed) executes retroactively as a corner cut — the overshoot distance is
+// carried into the new direction, so no speed is lost and no wall is entered.
+function tryCornerCut(d) {
+  const horiz = pac.dir.x !== 0;
+  if ((d.x !== 0) === horiz) return; // only perpendicular turns can cut
+  const pos = horiz ? pac.x : pac.y;
+  const sign = horiz ? pac.dir.x : pac.dir.y;
+  const lc = sign > 0 ? Math.floor(pos + 0.5) - 0.5 : Math.ceil(pos - 0.5) + 0.5;
+  const o = (pos - lc) * sign; // overshoot past the last crossed centre
+  if (o <= 1e-4 || o > 0.45) return;
+  const cx = horiz ? Math.floor(lc) : Math.floor(pac.x);
+  const cy = horiz ? Math.floor(pac.y) : Math.floor(lc);
+  if (!canGo(cx, cy, d)) return;
+  if (horiz) { pac.x = lc; pac.y += d.y * o; }
+  else { pac.y = lc; pac.x += d.x * o; }
+  pac.dir = d; pac.lastDir = d;
 }
 
 function tapAction() {
@@ -917,6 +940,7 @@ function frame(ts) {
 
 // debug/testing hook
 window.__pacman = {
+  press: (name) => setDesired(DIRS[name]),
   snapshot: () => ({
     state, score, high, lives, level, dots, dotsEaten,
     pac: { x: pac.x, y: pac.y },
