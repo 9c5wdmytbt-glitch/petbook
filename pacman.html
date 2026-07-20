@@ -395,7 +395,7 @@ function eatPellet(ch) {
     sfx.waka();
   }
   if (dotsEaten === 70 || dotsEaten === 170) fruitTimer = 9;
-  if (dots <= 0) { setState('levelclear', 2.2); sfx.clear(); }
+  if (dots <= 0) { setState('levelclear', 2.0); sfx.clear(); }
 }
 
 function eatGhost(g) {
@@ -689,11 +689,11 @@ function draw() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // walls (flash white when the level is cleared)
+  // walls (flash white 4-5 times when the level is cleared)
   let walls = wallsBlue;
   if (state === 'levelclear') {
-    const p = 2.2 - stateTimer;
-    if (p > 0.4 && Math.floor(p * 4) % 2 === 0) walls = wallsWhite;
+    const p = 2.0 - stateTimer;
+    if (p > 0.3 && Math.floor((p - 0.3) * 5) % 2 === 0) walls = wallsWhite;
   }
   if (walls) ctx.drawImage(walls, 0, 0);
 
@@ -719,7 +719,7 @@ function draw() {
   if (fruitTimer > 0) drawFruit();
 
   if (state !== 'gameover' && state !== 'start') {
-    if (state !== 'dying' || (2.6 - stateTimer) < 1.0) {
+    if (state !== 'levelclear' && (state !== 'dying' || (2.6 - stateTimer) < 1.0)) {
       for (const g of ghosts) drawGhost(g);
     }
     drawPac();
@@ -950,6 +950,7 @@ function frame(ts) {
 window.__pacman = {
   press: (name) => setDesired(DIRS[name]),
   kill: () => { if (state === 'playing') killPac(); },
+  winLevel: () => { if (state === 'playing') { dots = 0; setState('levelclear', 2.0); sfx.clear(); } },
   snapshot: () => ({
     state, score, high, lives, level, dots, dotsEaten,
     pac: { x: pac.x, y: pac.y },
