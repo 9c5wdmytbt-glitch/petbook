@@ -266,6 +266,7 @@ let frightTimer = 0, ghostChain = 0;
 let fruitTimer = 0;
 let popups = [];
 let muted = false;
+let vig = 0; // near-death vignette intensity (final life)
 
 const SCHEDULE = [
   [7, 'scatter'], [20, 'chase'], [7, 'scatter'], [20, 'chase'],
@@ -515,6 +516,12 @@ function eatGhost(g) {
   addScore(pts);
   g.state = 'eyes'; g.fright = false;
   popups.push({ x: g.x, y: g.y, text: String(pts), t: 1.0, color: '#4dd6ff' });
+  if (ghostChain >= 2) {
+    popups.push({
+      x: g.x, y: g.y - 1.2, t: 1.1, color: '#ffd23f',
+      text: ghostChain >= 4 ? 'FULL ROUT!' : 'ROUTED ×' + ghostChain + '!',
+    });
+  }
   freeze = 0.4;
   sfx.rundown();
 }
@@ -543,6 +550,9 @@ function update(dt) {
     for (const p of popups) p.t -= dt;
     popups = popups.filter(p => p.t > 0);
   }
+  // near-death vignette eases in while running on the final life
+  const vigOn = lives === 0 && state !== 'gameover' && state !== 'start';
+  vig += ((vigOn ? 1 : 0) - vig) * Math.min(1, dt * 3);
 
   if (state === 'ready') {
     stateTimer -= dt;
@@ -945,6 +955,16 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.fillText('RUN!', 14 * T, (TUNNEL_ROW + 3.5) * T + T * 0.35);
   }
+
+  if (vig > 0.01) { // final life: pulsing red edge
+    const cw = COLS * T, ch = ROWS * T;
+    const vgr = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.35, cw / 2, ch / 2, Math.max(cw, ch) * 0.62);
+    const pulse = 0.06 * (1 + Math.sin(anim * 5));
+    vgr.addColorStop(0, 'rgba(150,20,20,0)');
+    vgr.addColorStop(1, 'rgba(150,20,20,' + Math.min(0.5, (0.3 + pulse) * vig) + ')');
+    ctx.fillStyle = vgr;
+    ctx.fillRect(0, 0, cw, ch);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1015,13 +1035,16 @@ function tone(f0, f1, dur, type, vol, delay) {
     o.start(t0); o.stop(t0 + dur + 0.03);
   } catch (e) {}
 }
-let lastTick = 0;
+let lastTick = 0, tickStreak = 0;
 const sfx = {
-  // soft single paper-snick per dispatch: flat pitch, no alternating loop
+  // soft single paper-snick per dispatch; a fast unbroken streak creeps
+  // upward in pitch (resets after a 0.8s gap) — subtle, no alternating loop
   tick() {
     if (anim - lastTick < 0.06) return;
+    tickStreak = anim - lastTick > 0.8 ? 0 : tickStreak + 1;
     lastTick = anim;
-    tone(1180, 1180, 0.035, 'triangle', 0.05);
+    const f = 1180 * (1 + Math.min(tickStreak, 14) * 0.018);
+    tone(f, f, 0.035, 'triangle', 0.05);
   },
   flare()   { tone(160, 1500, 0.5, 'sawtooth', 0.1); tone(2300, 1700, 0.45, 'sine', 0.04, 0.12); },
   rundown() { tone(240, 60, 0.24, 'square', 0.12); },
@@ -1240,8 +1263,15 @@ window.__trenchfox = {
     for (const t of left.slice(n)) { grid[t.r][t.c] = null; dots--; }
   },
   music: () => ({ ready: !!music.layers, mode: music.mode, gains: { ...music.gains } }),
+  routNearest: () => { // test-only: run down the closest exposed hunter
+    if (state !== 'playing') return false;
+    const g = ghosts.find(x => x.fright && x.state === 'active');
+    if (g) eatGhost(g);
+    return !!g;
+  },
   snapshot: () => ({
-    state, score, high, lives, level, dots, dotsEaten, frightTimer,
+    state, score, high, lives, level, dots, dotsEaten, frightTimer, vig,
+    popups: popups.map(p => p.text),
     mazeIndex: (level - 1) % MAZES.length,
     pac: { x: pac.x, y: pac.y },
     ghosts: ghosts.map(g => ({ name: g.name, state: g.state, fright: g.fright, x: g.x, y: g.y })),

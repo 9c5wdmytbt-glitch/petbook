@@ -294,6 +294,7 @@ let rng = Math.random;
 let score = 0, time = 0, meter = 0, novaT = 0, chainIdx = 0, bestChain = 0;
 let combo = 0, comboT = 0;
 let grazeCombo = 0, lastGrazeT = 0;
+let dangerT = 0; // eased 0..1: a hostile is nearly touching the player
 let lastNovaClose = false;
 function grazeMult() {
   return grazeCombo <= 1 ? 1 : grazeCombo === 2 ? 1.5 : grazeCombo === 3 ? 2 : 2.5;
@@ -314,6 +315,7 @@ function newRun(m) {
   score = 0; time = 0; meter = 0; novaT = 0; chainIdx = 0; bestChain = 0;
   combo = 0; comboT = 0; motesEaten = 0; grazes = 0;
   grazeCombo = 0; lastGrazeT = 0; lastNovaClose = false;
+  dangerT = 0;
   spawnT = 1.2; shake = 0; flash = 0; timeScale = 1;
   wave = 1; waveT = 0; waveLull = false; wavePressure = 0; wavePulse = 0;
   dbgSpawns.length = 0;
@@ -586,6 +588,9 @@ function update(dt) {
         const pts = 100 << Math.min(chainIdx, 4);
         chainIdx++;
         bestChain = Math.max(bestChain, chainIdx);
+        if (chainIdx >= 4 && chainIdx % 2 === 0) {
+          banner = { text: 'CHAIN ×' + chainIdx + '!', t: 1.1, color: '#ffe9b8' };
+        }
         addScore(pts, sh.x, sh.y, String(pts), '#ffe9b8');
         burst(sh.x, sh.y, 14, C.frightGlow, 260);
         timeScale = 0.18; // hit-stop
@@ -607,6 +612,18 @@ function update(dt) {
     }
   }
   shades = shades.filter(s => !s.dead);
+
+  /* danger: a hostile one touch away — feeds the heartbeat music layer
+     and the near-death vignette (independent of the mute state) */
+  let danger = false;
+  if (novaT <= 0) {
+    for (const sh of shades) {
+      if (sh.fright > 0 || sh.warn > 0) continue;
+      const d = Math.hypot(sh.x - player.x, sh.y - player.y);
+      if (d < (sh.hState === 'lunge' ? 150 * S : 80 * S)) { danger = true; break; }
+    }
+  }
+  dangerT += ((danger ? 1 : 0) - dangerT) * Math.min(1, dt * 4);
 
   /* player ember trail */
   if (Math.hypot(player.vx, player.vy) > 40) {
@@ -858,6 +875,16 @@ function draw() {
     ctx.globalAlpha = 1;
   }
 
+  // near-death vignette: pulsing red edge while a hostile is one touch away
+  if (state === 'playing' && dangerT > 0.02) {
+    const vgr = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.62);
+    const pulse = 0.06 * (1 + Math.sin(anim * 6));
+    vgr.addColorStop(0, 'rgba(150,20,20,0)');
+    vgr.addColorStop(1, 'rgba(150,20,20,' + Math.min(0.45, (0.26 + pulse) * dangerT) + ')');
+    ctx.fillStyle = vgr;
+    ctx.fillRect(-30, -30, W + 60, H + 60);
+  }
+
   // flash
   if (flash > 0) {
     ctx.fillStyle = 'rgba(220,230,255,' + flash * 0.55 + ')';
@@ -939,14 +966,7 @@ function musicTick(dt) {
     tc = music.mode === 'calm' ? 1 : 0.25;
     tp = music.mode === 'pressure' ? 1 : 0;
     tr = music.mode === 'release' ? 1 : 0;
-    if (novaT <= 0 && player) { // heartbeat: a hostile is nearly touching us
-      for (const sh of shades) {
-        if (sh.fright > 0 || sh.warn > 0) continue;
-        const d = Math.hypot(sh.x - player.x, sh.y - player.y);
-        const rr = sh.hState === 'lunge' ? 150 * S : 80 * S;
-        if (d < rr) { th = 1; break; }
-      }
-    }
+    th = dangerT; // heartbeat follows the shared danger signal
   }
   const ease = Math.min(1, dt * 1.8);
   music.gains.calm += (tc - music.gains.calm) * ease;
@@ -1130,7 +1150,8 @@ document.getElementById('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;'
 window.__starshell = {
   snap: () => ({ state, mode, score, best, time, meter, novaT, combo, bestChain,
                  wave, waveLull, wavePressure,
-                 grazeCombo, grazeMult: grazeMult(), lastNovaClose,
+                 grazeCombo, grazeMult: grazeMult(), lastNovaClose, dangerT,
+                 banner: banner ? banner.text : null,
                  shades: shades.length, motes: motes.length,
                  player: player ? { x: player.x, y: player.y } : null }),
   motePos: () => motes.map(m => ({ x: m.x, y: m.y })),

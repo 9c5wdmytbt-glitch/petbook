@@ -175,6 +175,28 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
   snap = await page.evaluate(() => window.__starshell.snap());
   assert(snap.state === 'playing' && snap.score < 100, 'retry restarts clean (' + snap.state + '/' + snap.score + ')');
 
+  // juice: hold still until a hostile closes in — the shared danger signal
+  // (heartbeat layer + near-death vignette) must rise before contact
+  let dangerSeen = 0;
+  for (let attempt = 0; attempt < 2 && dangerSeen <= 0.15; attempt++) {
+    dangerSeen = await page.evaluate(() => new Promise(resolve => {
+      let seen = 0;
+      const t0 = performance.now();
+      const iv = setInterval(() => {
+        const s = window.__starshell.snap();
+        seen = Math.max(seen, s.dangerT || 0);
+        if (seen > 0.15 || s.state !== 'playing' || performance.now() - t0 > 20000) {
+          clearInterval(iv); resolve(seen);
+        }
+      }, 40);
+    }));
+    if (dangerSeen <= 0.15) { // died between polls; go again
+      await page.tap('#btnRetry').catch(() => {});
+      await page.waitForTimeout(400);
+    }
+  }
+  assert(dangerSeen > 0.15, 'danger signal rises as a hostile closes (' + dangerSeen.toFixed(2) + ')');
+
   // Daily mode + storage hygiene
   await page.evaluate(() => window.__starshell.kill());
   for (let i = 0; i < 25; i++) {

@@ -111,6 +111,20 @@ function checkMaze(rows, label) {
   const mus = await page.evaluate(() => window.__trenchfox.music());
   assert(mus.ready, 'music layers initialised');
   assert(mus.mode === 'triumph', 'flare reversal escalates music to triumph (' + mus.mode + ')');
+
+  // juice: running down exposed hunters fires ROUTED callout popups
+  const routs = await page.evaluate(() => {
+    let n = 0;
+    while (n < 3 && window.__trenchfox.routNearest()) n++;
+    return { n, popups: window.__trenchfox.snapshot().popups };
+  });
+  assert(routs.n >= 1, 'ran down at least one exposed hunter');
+  if (routs.n >= 2) {
+    assert(routs.popups.some(t => /ROUTED ×2!|FULL ROUT!/.test(t)),
+      'ROUTED callout popup shown (' + routs.popups.join(',') + ')');
+  } else {
+    console.log('note: only one hunter active at flare time — callout needs a chain of 2');
+  }
   await page.waitForTimeout(2500);
 
   // Death: 0.5s freeze then sequence, ~2.6s total, hunters immobile
@@ -235,13 +249,16 @@ function checkMaze(rows, label) {
   const xpBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('arcade-xp')) || 0);
   const over = await page.evaluate(() => new Promise(resolve => {
     const t0 = performance.now();
+    let sawVig = 0;
     const iv = setInterval(() => {
       const s = window.__trenchfox.snapshot();
+      if (s.lives === 0) sawVig = Math.max(sawVig, s.vig);
       if (s.state === 'gameover') {
         clearInterval(iv);
         resolve({
           msg: document.getElementById('ovMsg').textContent,
           xp: JSON.parse(localStorage.getItem('arcade-xp')) || 0,
+          sawVig,
         });
         return;
       }
@@ -250,6 +267,7 @@ function checkMaze(rows, label) {
     }, 400);
   }));
   assert(over, 'lives run down to game over');
+  assert(over.sawVig > 0.2, 'near-death vignette engages on the final life (' + over.sawVig.toFixed(2) + ')');
   assert(/RANK [A-Z ]+/.test(over.msg) && /\+\d+ XP/.test(over.msg),
     'game over shows rank + XP gained');
   assert(over.xp > xpBefore, 'arcade-xp banked (' + xpBefore + ' -> ' + over.xp + ')');
