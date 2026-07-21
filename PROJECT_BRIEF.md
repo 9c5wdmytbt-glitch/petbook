@@ -47,6 +47,7 @@ Date: 2026-07-20 (updated after batch 2)
   - `nova.html` — complete NOVA (~990 lines)
   - `tests/` — QA suite (static server, three smoke tests, tuning harness, README)
   - `.github/workflows/pages.yml` — Pages deploy workflow
+  - `manifest.webmanifest`, `sw.js`, `icons/` — PWA (installable, offline)
   - `README.md`, `PROJECT_BRIEF.md` — docs
 - **Game loop (both):** single rAF loop → `update(dt)` (input → movement →
   collisions → state machine) → `draw()` → DOM HUD sync.
@@ -88,7 +89,7 @@ No database. All persistence is browser `localStorage`, per-device:
 | Arcade hub with LAUNCH buttons | Done | |
 | GitHub Pages deployment | **Live** | Auto-deploys on push to main; run #10 green |
 | Committed QA suite (`npm test`) | Done | 3 suites, all green; fails on any console error |
-| PWA (installable, offline cache) | Planned | Not started |
+| PWA (installable, offline play) | Done | manifest + icons + network-first SW; offline boot covered by tests/pwa.test.js |
 
 ## 6. API Surface
 Not applicable — static pages only. Each game exposes a debug hook
@@ -161,7 +162,7 @@ before that: both games, hub, Pages deploy (live since run #8).
 
 Next steps, in priority order:
 1. Human play-test to settle the three flagged tuning decisions (§10).
-2. PWA manifest + service worker so both games install to the home screen.
-3. Real-device iOS Safari pass (share sheet, haptics, audio unlock, safe areas).
-4. Consider a shared `arcade.js` if a third game is added.
-5. Optional: exclude `tests/` from the deployed artifact for tidiness.
+2. Real-device iOS Safari pass (share sheet, haptics, audio unlock, safe
+   areas, home-screen install).
+3. Consider a shared `arcade.js` if a third game is added.
+4. Optional: exclude `tests/` from the deployed artifact for tidiness.

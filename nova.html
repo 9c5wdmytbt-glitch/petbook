@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>NOVA</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
@@ -1018,6 +1020,13 @@ window.__nova = {
 
 setState('menu');
 requestAnimationFrame(frame);
+
+// PWA: register the service worker (skipped on file:// where it's unsupported)
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
