@@ -1,7 +1,7 @@
 {
   "name": "Petbook Arcade",
   "short_name": "Arcade",
-  "description": "TRENCHFOX and STARSHELL — mobile arcade games. No install, no account, plays offline.",
+  "description": "LAST FLARE, TRENCHFOX and STARSHELL — mobile arcade games. No install, no account, plays offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

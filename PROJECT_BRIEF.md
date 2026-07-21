@@ -1,9 +1,11 @@
 # PROJECT BRIEF — Petbook Arcade
-Date: 2026-07-21 (updated after the IP-clean rework)
+Date: 2026-07-21 (updated after the LAST FLARE flagship launch)
 
 ## 1. Purpose & Business Context
-- A mobile-first browser arcade containing two complete games: **TRENCHFOX**, an original
-  trench-network maze-chase, and **STARSHELL**, an original arena game built on a
+- A mobile-first browser arcade containing three complete games: **LAST FLARE**
+  (the flagship), a one-thumb survivor-style roguelite with meta progression
+  and a seeded Daily Operation; **TRENCHFOX**, an original trench-network
+  maze-chase; and **STARSHELL**, an original arena game built on a
   hunted → charge → reversal → feast loop.
   Everything is plain HTML/CSS/JavaScript with zero dependencies and zero build
   step — each game is one self-contained file that runs in any modern browser.
@@ -42,7 +44,9 @@ Date: 2026-07-21 (updated after the IP-clean rework)
   files must work standalone when copied or published as artifacts). Plain
   `<a href>` navigation from the hub.
 - Directory structure:
-  - `index.html` — arcade hub / launcher with LAUNCH buttons for both games
+  - `index.html` — arcade hub / launcher; LAST FLARE headline card (with a
+    live rank readout from localStorage) plus cards for the other two games
+  - `lastflare.html` — complete LAST FLARE (~1800 lines)
   - `trenchfox.html` — complete TRENCHFOX (~1150 lines)
   - `starshell.html` — complete STARSHELL (~990 lines)
   - `tests/` — QA suite (static server, three smoke tests, tuning harness, README)
@@ -66,6 +70,18 @@ Date: 2026-07-21 (updated after the IP-clean rework)
   scaling charge ×1→×2.5; CLOSE CALL bonus (shell fired with an enemy inside
   ~1.5× graze ring: chain starts at 200, feast +20% longer); chain scoring
   100→1600; seeded daily challenge with streaks; share card.
+- **LAST FLARE specifics:** camera-follow open arena (soft 1400-unit boundary);
+  object pools for enemies/projectiles/particles/gems/popups (hard caps
+  200/300/400) with a spatial hash grid for queries; three enemy types
+  (rusher/shooter/heavy); four weapons × 4 visible levels + four passives via
+  1-of-3 "field promotion" cards; meta progression (salvage bank, four
+  operators, permanent perks, canvas medals album, rank ladder on lifetime
+  salvage); seeded Daily Operation (deterministic waves/offers/missions, five
+  rotating modifiers, 5:00 extraction, streaks, emoji share card); endless
+  adaptive intensity (±20% off the last five run lengths); session missions;
+  three-layer dynamic synth music (calm → pressure → last stand); graceful
+  degradation ladder (halve particles → cap enemies) driven by a rolling
+  frame-time monitor.
 - **Authentication / authorisation:** None. No accounts, no PII.
 
 ## 4. Data Model
@@ -74,6 +90,13 @@ No database. All persistence is browser `localStorage`, per-device:
 - STARSHELL (JSON via a `store` wrapper, `starshell-` prefix; legacy `nova-*` saves migrate on first load): `starshell-best`, `starshell-muted`,
   `starshell-streak`, `starshell-lastDaily`, `starshell-daily-<YYYY-MM-DD>`
   (per-day best; yesterday's value feeds the menu display)
+- LAST FLARE (JSON via the same `store` pattern, `lastflare-` prefix only):
+  `lastflare-xp` (lifetime salvage = rank XP), `lastflare-salvageBank`,
+  `lastflare-operators`, `lastflare-operator`, `lastflare-perks`,
+  `lastflare-medals`, `lastflare-bestTime`, `lastflare-recent` (last five run
+  lengths, feeds adaptive difficulty), `lastflare-streak`, `lastflare-lastDaily`,
+  `lastflare-daily-<YYYY-MM-DD>`, `lastflare-muted`. The hub reads
+  `lastflare-xp`/`lastflare-salvageBank` (same origin) for its rank readout.
 
 ## 5. Features — Current State
 | Feature | Status | Notes |
@@ -89,14 +112,20 @@ No database. All persistence is browser `localStorage`, per-device:
 | STARSHELL: daily challenge, streaks, share card | Done | Menu shows streak / today / yesterday |
 | Arcade hub with LAUNCH buttons | Done | |
 | GitHub Pages deployment | **Live** | Auto-deploys on push to main; run #10 green |
-| Committed QA suite (`npm test`) | Done | 3 suites, all green; fails on any console error |
-| PWA (installable, offline play) | Done | manifest + icons + network-first SW; offline boot covered by tests/pwa.test.js |
+| Committed QA suite (`npm test`) | Done | 5 suites (hub, pwa, trenchfox, starshell, lastflare), all green; fails on any console error |
+| PWA (installable, offline play) | Done | manifest + icons + network-first SW (cache v4 incl. lastflare.html); offline boot covered by tests/pwa.test.js |
+| LAST FLARE: core loop, 4 weapons × 4 levels, promotions | Done | Covered by tests/lastflare.test.js |
+| LAST FLARE: barracks (operators/perks/medals/ranks) | Done | Meta persistence asserted across reloads |
+| LAST FLARE: Daily Operation (seeded) + streaks + share card | Done | Same-date determinism asserted (waves, offers, missions) |
+| LAST FLARE: session missions, dynamic music, near-death vignette | Done | Last-stand escalation asserted |
+| LAST FLARE: perf budget + degradation ladder | Done | Minute-5 bot run p95 16.80ms; caps never exceeded |
 
 ## 6. API Surface
 Not applicable — static pages only. Each game exposes a debug hook
-(`window.__trenchfox`, `window.__starshell`) with read-only snapshots and test-only
-triggers (press/kill/winLevel; charge/boom/kill/spawnHunter/spawns). Harmless
-in production; used by the QA suite.
+(`window.__trenchfox`, `window.__starshell`, `window.__lastflare`) with read-only
+snapshots and test-only triggers (press/kill/winLevel; charge/boom/kill/
+spawnHunter/spawns; snap/hurt/heal/spawn/pick/startDaily/perf/setPerf/
+frameTimes). Harmless in production; used by the QA suite.
 
 ## 7. Security Posture
 - No secrets anywhere; the workflow uses the ephemeral `GITHUB_TOKEN` with
@@ -116,8 +145,10 @@ in production; used by the QA suite.
   bots rarely survive that long), long-session performance on low-end phones.
 - **Known bugs:** none currently known.
 - **Technical debt (specific):**
-  - ~150 lines of near-duplicated boilerplate between the two games (audio,
-    storage, resize) — acceptable at 2 games, extract if a third is added.
+  - ~150 lines of near-duplicated boilerplate now across three games (audio,
+    storage, resize) — the planned "extract a shared arcade.js if a third
+    game is added" threshold has been reached; worth doing next time any of
+    the three is touched substantially.
   - GitHub Actions checkout/configure-pages emit Node 20 deprecation warnings;
     bump the action majors when released.
 - **TODO/FIXME comments:** none.
@@ -152,7 +183,18 @@ in production; used by the QA suite.
 
 ## 11. Recent Work & Next Steps
 Recent work (newest first):
-1. IP-clean rework in four staged commits: TRENCHFOX (all-new WWI trench
+1. **LAST FLARE** built and shipped as the arcade flagship in six staged,
+   individually tested commits: core run loop → upgrade choice loop → meta
+   progression → Daily Operation + adaptive difficulty → performance budget
+   with graceful degradation (minute-5 bot run p95 16.80ms at a locked
+   60fps) → integration and juice (hub headline card with rank readout,
+   session missions, three-layer dynamic music, near-death vignette, wave
+   callouts, SW cache v4, committed lastflare test suite). Also fixed a
+   latent STARSHELL bug where the paused panel swallowed the
+   tap-to-resume. Note: the "shared XP/rank" system, session missions, and
+   dynamic music did not pre-exist in the arcade — they were built inside
+   LAST FLARE (lastflare-* storage only); the hub reads the rank for display.
+2. IP-clean rework in four staged commits: TRENCHFOX (all-new WWI trench
    theme, three generated + validated layouts, four renamed/re-behaved
    hunters, new art and audio, trenchfox-* storage) replaces the earlier
    maze game; STARSHELL (rename, flare-gold/night-blue palette, and a

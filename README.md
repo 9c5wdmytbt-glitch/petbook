@@ -7,9 +7,34 @@
 </p>
 
 **[Launch the arcade &rarr;](https://9c5wdmytbt-glitch.github.io/petbook/)** — a hub page
-([`index.html`](index.html)) with launch buttons for both games. Direct links:
+([`index.html`](index.html)) with launch buttons for all three games. Direct links:
+[LAST FLARE](https://9c5wdmytbt-glitch.github.io/petbook/lastflare.html) ·
 [STARSHELL](https://9c5wdmytbt-glitch.github.io/petbook/starshell.html) ·
 [TRENCHFOX](https://9c5wdmytbt-glitch.github.io/petbook/trenchfox.html)
+
+## LAST FLARE (mobile) — the flagship
+
+A one-thumb survivor-style roguelite in a single self-contained file:
+[`lastflare.html`](lastflare.html). Hold the line as escalating waves close in —
+your guns fire themselves, you drive the positioning.
+
+- Drag to move, auto-fire; 3–6 minute runs with instant retry
+- Field promotions: pick 1 of 3 cards each level — four weapons (rifle, trench
+  mortar, flare gun, bayonet sweep) with four visible upgrade tiers each, plus
+  four passives; by minute 4 the screen is full of fire
+- Meta progression: salvage banks win or lose, a barracks with four unlockable
+  operators (the Fox comes last), permanent perks, a medals album with visible
+  locked slots, and a rank ladder driven by lifetime salvage
+- Seeded **Daily Operation**: a fixed operator, deterministic waves and upgrade
+  offers, one rotating modifier, 5:00 extraction to win, streaks, and a
+  Wordle-style emoji share card
+- Session missions with salvage bonuses; adaptive endless difficulty
+  (±20% rubber-band off your recent run lengths)
+- Dynamic three-layer synth soundtrack (calm → pressure → last stand), damage
+  popups, wave callouts, near-death vignette, haptics
+- Performance budget: object pools (200 enemies / 300 projectiles / 400
+  particles), off-screen culling, batched draws, and a graceful degradation
+  ladder that halves particles before capping enemies under sustained load
 
 ## STARSHELL (mobile)
 
@@ -53,4 +78,6 @@ signal flare goes up the four hunters are exposed and can be run down.
 
 A Playwright smoke suite lives in [`tests/`](tests/) — see
 [`tests/README.md`](tests/README.md). `npm test` serves the repo statically
-and exercises both games and the hub, failing on any console error.
+and exercises all three games and the hub — including LAST FLARE's daily-seed
+determinism (the same date string must produce identical waves and upgrade
+offers) — failing on any console error.

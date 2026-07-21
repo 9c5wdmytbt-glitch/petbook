@@ -59,6 +59,20 @@
     background: radial-gradient(circle at 50% 50%, #fff6d8 0 26%, #ffd76a 40%, rgba(255,154,61,.55) 62%, transparent 72%);
     box-shadow: 0 0 30px rgba(255,190,80,.5);
   }
+  .icon.flare {
+    background: conic-gradient(from -45deg at 50% 60%, transparent 0 30%, #ff6a40 34%, #ffd76a 50%, #ff6a40 66%, transparent 70%);
+    box-shadow: 0 0 34px rgba(255,120,60,.55);
+  }
+  .card.headline {
+    border-color: rgba(255,190,80,.5);
+    background: linear-gradient(180deg, rgba(255,170,70,.12), rgba(255,170,70,.03));
+  }
+  .card.headline .flag {
+    align-self: flex-start; font-size: 10px; font-weight: 800; letter-spacing: 3px;
+    color: #201200; background: linear-gradient(180deg, #ffe9b8, #ffb84d);
+    border-radius: 6px; padding: 4px 9px;
+  }
+  .card .rankline { font-size: 11.5px; letter-spacing: 1.5px; color: #ffd76a; }
   .card h2 { font-size: 22px; letter-spacing: 4px; color: #fff; }
   .card .sub { font-size: 12px; letter-spacing: 1px; color: #8a8fb8; margin-top: 3px; }
   .card p { font-size: 13.5px; line-height: 1.65; color: #aab0d4; }
@@ -83,9 +97,24 @@
   <header>
     <h1>PETBOOK</h1>
     <div class="marquee">ARCADE</div>
-    <div class="tagline">TWO TALES OF THE NIGHT &mdash; RUN THE TRENCHES, LIGHT THE SKY</div>
+    <div class="tagline">THREE TALES OF THE NIGHT &mdash; HOLD THE LINE, RUN THE TRENCHES, LIGHT THE SKY</div>
   </header>
   <main>
+    <div class="card headline">
+      <div class="flag">FLAGSHIP</div>
+      <div class="card-head">
+        <div class="icon flare"></div>
+        <div>
+          <h2>LAST FLARE</h2>
+          <div class="sub">SURVIVOR ROGUELITE &middot; ONE THUMB &middot; DAILY OPERATION</div>
+        </div>
+      </div>
+      <p>Hold the line as the horde closes in. Drag to move &mdash; your guns fire
+         themselves. Level up mid-fight, stack four weapons, bank salvage for
+         operators and perks, and take on the seeded Daily Operation.</p>
+      <div class="rankline" id="lfRank"></div>
+      <a class="launch" href="lastflare.html">&#9654;&nbsp; LAUNCH</a>
+    </div>
     <div class="card">
       <div class="card-head">
         <div class="icon shell"></div>
@@ -113,6 +142,21 @@
   </main>
   <footer>NO INSTALL &middot; NO ACCOUNT &middot; PLAYS OFFLINE ONCE LOADED</footer>
 <script>
+// LAST FLARE rank readout (same-origin localStorage; ladder mirrors the game)
+try {
+  const RANKS = [['Private', 0], ['Corporal', 300], ['Sergeant', 800], ['Lieutenant', 1600],
+    ['Captain', 3000], ['Major', 5000], ['Colonel', 8000], ['Field Marshal', 12000]];
+  const xp = JSON.parse(localStorage.getItem('lastflare-xp'));
+  if (typeof xp === 'number' && xp > 0) {
+    let r = RANKS[0][0];
+    for (const [name, need] of RANKS) if (xp >= need) r = name;
+    const bank = JSON.parse(localStorage.getItem('lastflare-salvageBank')) || 0;
+    document.getElementById('lfRank').textContent =
+      'RANK: ' + r.toUpperCase() + ' · ' + xp.toLocaleString() + ' XP' +
+      (bank > 0 ? ' · ' + bank.toLocaleString() + ' SALVAGE BANKED' : '');
+  }
+} catch (e) {}
+
 // PWA: register the service worker (skipped on file:// where it's unsupported)
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => {

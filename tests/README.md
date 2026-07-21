@@ -1,7 +1,8 @@
 # Petbook Arcade — QA suite
 
-Playwright smoke tests for both games and the hub, driven through the games'
-built-in debug hooks (`window.__trenchfox`, `window.__starshell`).
+Playwright smoke tests for all three games and the hub, driven through the
+games' built-in debug hooks (`window.__trenchfox`, `window.__starshell`,
+`window.__lastflare`).
 
 ## Run
 
@@ -20,7 +21,12 @@ CHROMIUM_PATH=/path/to/chrome-or-chromium npm test
 - `starshell.test.js` — legacy-save migration, boot, steering, scoring,
   hunter telegraph, shell burst + chain, death, retry, daily mode,
   `starshell-` storage-key hygiene
-- `hub.test.js` — hub launch buttons navigate to both games
+- `lastflare.test.js` — boot, run start, damage + iframes, the 1-of-3
+  promotion flow, session missions, dynamic-music escalation to last stand,
+  the performance-degradation ladder, meta persistence across reloads, and
+  daily-seed determinism (the same date string must produce identical waves,
+  upgrade offers, and missions; a different date must not)
+- `hub.test.js` — the LAST FLARE flagship card plus all three launch buttons
 
 Every test also fails on any console/page error.
 

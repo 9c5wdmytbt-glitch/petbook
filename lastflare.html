@@ -187,6 +187,7 @@
     <span>Level reached</span><b id="ovLevel">1</b>
     <span>Salvage</span><b id="ovSalvage">0</b>
   </div>
+  <div id="ovMissions" style="display:flex;flex-direction:column;gap:5px;font-size:12.5px"></div>
   <button class="primary" id="btnRetry">GO AGAIN</button>
   <div style="display:flex;gap:10px">
     <button class="small" id="btnShare">SHARE</button>
@@ -203,6 +204,7 @@
 
 <div class="panel hidden" id="paused">
   <div style="font-size:22px;letter-spacing:8px;color:#dfe3ff">HOLD</div>
+  <div id="pauseMissions" style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;margin:8px 0"></div>
   <div class="tagline pulse">Tap to resume</div>
 </div>
 
@@ -656,7 +658,11 @@ function spawnEnemy(type) {
 function updateSpawning(dt) {
   run.waveT += dt;
   if (!run.lull && run.waveT >= 26) { run.lull = true; run.waveT = 0; }
-  else if (run.lull && run.waveT >= 5) { run.lull = false; run.waveT = 0; run.wave++; }
+  else if (run.lull && run.waveT >= 5) {
+    run.lull = false; run.waveT = 0; run.wave++;
+    popup(player.x, player.y - 40, 'WAVE ' + run.wave, '#ffd76a');
+    sfx.wave();
+  }
   spawnT -= dt;
   if (spawnT <= 0) {
     spawnEnemy(pickType());
@@ -676,6 +682,10 @@ function hurtPlayer(dmg) {
   burst(player.x, player.y, 8, 'rgba(255,106,64,1)', 220);
   vibrate(40);
   sfx.hurt();
+  if (run.hp > 0 && run.hp / run.maxHp < 0.32 && !run.lastStand) {
+    run.lastStand = true;
+    popup(player.x, player.y - 52, 'LAST STAND', '#ff6a40');
+  }
   if (run.hp <= 0) { run.hp = 0; endRun(); }
 }
 function damageEnemy(e, dmg, kx, ky) {
@@ -689,6 +699,7 @@ function killEnemy(e) {
   const spec = ENEMY_TYPES[e.type];
   free(enemies, e);
   run.kills++;
+  if (e.type === 'heavy') run.heavyKills++;
   if (run.timeToFirstKill === null) run.timeToFirstKill = run.t;
   burst(e.x, e.y, e.type === 'heavy' ? 14 : 6, spec.glow, 240);
   if (e.type === 'heavy') { freeze = 0.06; shake = Math.max(shake, 5); }
@@ -820,7 +831,7 @@ function update(dt) {
   run.t += gdt;
   if (run.inv > 0) run.inv -= gdt;
   if (run.regen) run.hp = Math.min(run.maxHp, run.hp + run.regen * gdt);
-  if ((run.t | 0) !== run._medalT) { run._medalT = run.t | 0; checkRunMedals(); }
+  if ((run.t | 0) !== run._medalT) { run._medalT = run.t | 0; checkRunMedals(); tickMissions(); }
   if (mode === 'daily' && run.t >= 300) { endRun(true); return; }
 
   /* --- player steering (drag anywhere; the stick is the world) --- */
@@ -967,6 +978,48 @@ function update(dt) {
 }
 
 /* ================================================================== */
+/*  Session missions: three per run, salvage bonus on completion      */
+/* ================================================================== */
+const MISSION_POOL = [
+  { id: 'kills',   name: 'Confirm {n} kills',    ns: [60, 150, 300],  check: () => run.kills,      bonus: 40 },
+  { id: 'survive', name: 'Hold for {n}',         ns: [120, 180, 240], check: () => run.t | 0,      bonus: 50, fmt: fmtTime },
+  { id: 'salvage', name: 'Recover {n} salvage',  ns: [80, 160, 280],  check: () => run.salvage,    bonus: 40 },
+  { id: 'level',   name: 'Reach level {n}',      ns: [8, 12, 16],     check: () => run.level,      bonus: 45 },
+  { id: 'heavy',   name: 'Down {n} heavies',     ns: [3, 8, 15],      check: () => run.heavyKills, bonus: 55 },
+];
+let missions = [];
+function rollMissions() {
+  // deterministic in daily mode: same date -> same mission sheet
+  const rng = mode === 'daily' ? mulberry32((dailySeed ^ 0x9e3779b9) >>> 0) : Math.random;
+  const idx = [0, 1, 2, 3, 4];
+  missions = [];
+  for (let i = 0; i < 3; i++) {
+    const m = MISSION_POOL[idx.splice((rng() * idx.length) | 0, 1)[0]];
+    const n = m.ns[(rng() * m.ns.length) | 0];
+    missions.push({
+      id: m.id, n, check: m.check, bonus: m.bonus, done: false,
+      name: m.name.replace('{n}', m.fmt ? m.fmt(n) : n),
+    });
+  }
+}
+function tickMissions() {
+  for (const m of missions) {
+    if (!m.done && m.check() >= m.n) {
+      m.done = true;
+      run.salvage += m.bonus;
+      popup(player.x, player.y - 52, 'MISSION ✓ +' + m.bonus + ' SALVAGE', '#7dff9a');
+      sfx.medal();
+    }
+  }
+}
+function missionHtml() {
+  return missions.map(m =>
+    '<div style="letter-spacing:1px;color:' + (m.done ? '#7dff9a' : '#8a8fb8') + '">' +
+    (m.done ? '✔ ' : '◦ ') + m.name + ' <span style="opacity:.7">+' + m.bonus + '</span></div>'
+  ).join('');
+}
+
+/* ================================================================== */
 /*  Run lifecycle                                                     */
 /* ================================================================== */
 function resetRun() {
@@ -997,6 +1050,8 @@ function resetRun() {
   player.speed = 215 * op.speedMul * (1 + meta.perkLvl('speed') * 0.04);
   run.wave = 1; run.waveT = 0; run.lull = false;
   run.timeToFirstKill = null;
+  run.heavyKills = 0; run.lastStand = false;
+  rollMissions();
   player.x = player.y = player.vx = player.vy = 0;
   camera.x = camera.y = 0;
   sweeps.length = 0;
@@ -1055,6 +1110,7 @@ function endRun(won) {
   document.getElementById('ovKills').textContent = run.kills;
   document.getElementById('ovLevel').textContent = run.level;
   document.getElementById('ovSalvage').textContent = '+' + run.salvage;
+  document.getElementById('ovMissions').innerHTML = missionHtml();
   document.getElementById('btnShare').style.display = mode === 'daily' ? '' : 'none';
   setState('gameover');
 }
@@ -1078,6 +1134,7 @@ function setState(s) {
   document.getElementById('paused').classList.toggle('hidden', s !== 'paused');
   document.getElementById('hud').classList.toggle('shown', s === 'playing' || s === 'paused' || s === 'upgrade');
   document.getElementById('pauseBtn').classList.toggle('shown', s === 'playing');
+  if (s === 'paused') document.getElementById('pauseMissions').innerHTML = missionHtml();
   if (s === 'menu') {
     const bank = store.get('salvageBank', 0), best = store.get('bestTime', 0);
     document.getElementById('menuStats').innerHTML =
@@ -1295,6 +1352,18 @@ function draw() {
     ctx.fillStyle = fg;
     ctx.fillRect(-20, -20, W + 40, H + 40);
   }
+  if (state === 'playing' || state === 'paused') {
+    const hpFrac = run.hp / run.maxHp;
+    if (hpFrac < 0.35) { // near-death vignette, pulsing harder as HP falls
+      const a = (0.35 - hpFrac) / 0.35;
+      const pulse = 0.08 * (1 + Math.sin(anim * 5.5));
+      const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.62);
+      vg.addColorStop(0, 'rgba(150,20,20,0)');
+      vg.addColorStop(1, 'rgba(150,20,20,' + Math.min(0.6, 0.18 + 0.35 * a + pulse * a) + ')');
+      ctx.fillStyle = vg;
+      ctx.fillRect(-20, -20, W + 40, H + 40);
+    }
+  }
   if (flash > 0) {
     ctx.fillStyle = 'rgba(255,80,60,' + flash * 0.4 + ')';
     ctx.fillRect(-20, -20, W + 40, H + 40);
@@ -1341,6 +1410,7 @@ function unlockAudio() {
     } catch (e) {}
   }
   if (actx && actx.state === 'suspended') actx.resume();
+  musicInit();
 }
 function tone(f0, f1, dur, type, vol, delay) {
   if (muted || !actx || actx.state !== 'running') return;
@@ -1371,6 +1441,63 @@ function boom(vol, dur) {
     src.start(t0); src.stop(t0 + dur);
   } catch (e) {}
 }
+/* ---- dynamic music: three synth layers, calm -> pressure -> last stand.
+   Continuous oscillators (osc -> pulsing voice gain -> layer mix gain);
+   the frame loop just eases the three mix gains toward state-driven
+   targets, so transitions are crossfades with no scheduling. ---- */
+const music = { layers: null, gains: { calm: 0, pressure: 0, last: 0 }, mode: 'calm' };
+function musicInit() {
+  if (music.layers || !actx) return;
+  try {
+    const master = actx.createGain(); master.gain.value = 0.16; master.connect(actx.destination);
+    const layer = () => { const g = actx.createGain(); g.gain.value = 0; g.connect(master); return g; };
+    const osc = (type, freq, dest) => {
+      const o = actx.createOscillator(); o.type = type; o.frequency.value = freq;
+      o.connect(dest); o.start(); return o;
+    };
+    const pulse = (dest, rate, depth) => { // voice gain pulsed by a square LFO
+      const vg = actx.createGain(); vg.gain.value = 1 - depth; vg.connect(dest);
+      const lfo = actx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = rate;
+      const lg = actx.createGain(); lg.gain.value = depth;
+      lfo.connect(lg); lg.connect(vg.gain); lfo.start();
+      return vg;
+    };
+    const calm = layer();               // slow-breathing low drone (A1 + E2)
+    const calmV = pulse(calm, 0.13, 0.35);
+    osc('sine', 55, calmV); osc('sine', 82.41, calmV);
+    const pressure = layer();           // pulsing filtered low saw
+    const pf = actx.createBiquadFilter(); pf.type = 'lowpass'; pf.frequency.value = 420;
+    pf.connect(pulse(pressure, 2.2, 0.85));
+    osc('sawtooth', 110, pf);
+    const last = layer();               // minor-second grind, twice the pulse rate
+    const bf = actx.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = 880;
+    bf.connect(pulse(last, 4.4, 0.9));
+    osc('sawtooth', 220, bf); osc('square', 233.08, bf);
+    music.layers = { calm, pressure, last };
+  } catch (e) {}
+}
+function musicTick(dt) {
+  if (!music.layers) return;
+  let tc = 0, tp = 0, tl = 0;
+  if (state === 'playing' && !muted) {
+    const density = enemies.count / 60 + Math.min(1, run.t / 240) * 0.5;
+    music.mode = (run.hp / run.maxHp < 0.32 || enemies.count > 120) ? 'laststand'
+               : density > 0.55 ? 'pressure' : 'calm';
+    tc = music.mode === 'calm' ? 1 : 0.25;
+    tp = music.mode === 'pressure' ? 1 : music.mode === 'laststand' ? 0.6 : 0;
+    tl = music.mode === 'laststand' ? 1 : 0;
+  }
+  const ease = Math.min(1, dt * 1.6);
+  music.gains.calm += (tc - music.gains.calm) * ease;
+  music.gains.pressure += (tp - music.gains.pressure) * ease;
+  music.gains.last += (tl - music.gains.last) * ease;
+  try {
+    music.layers.calm.gain.value = music.gains.calm * 0.5;
+    music.layers.pressure.gain.value = music.gains.pressure * 0.4;
+    music.layers.last.gain.value = music.gains.last * 0.45;
+  } catch (e) {}
+}
+
 let shotAlt = false;
 const sfx = {
   shot()      { shotAlt = !shotAlt; tone(shotAlt ? 950 : 900, 300, 0.05, 'square', 0.04); },
@@ -1391,6 +1518,7 @@ const sfx = {
   deny()      { tone(200, 150, 0.15, 'square', 0.08); },
   extract()   { tone(660, 990, 0.18, 'triangle', 0.11); tone(990, 1480, 0.3, 'triangle', 0.11, 0.2); },
   death()     { boom(0.3, 0.8); tone(400, 42, 1.0, 'sawtooth', 0.13); },
+  wave()      { tone(392, 392, 0.1, 'triangle', 0.09); tone(523, 523, 0.16, 'triangle', 0.09, 0.11); },
 };
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
 
@@ -1469,6 +1597,7 @@ function frame(ts) {
   }
   last = ts;
   if (state !== 'paused') update(dt);
+  musicTick(dt);
   tickHud();
   draw();
   requestAnimationFrame(frame);
@@ -1492,6 +1621,8 @@ window.__lastflare = {
   killAll: () => { for (const e of enemies.items) if (e.alive) killEnemy(e); },
   frameTimes: () => frameLog.slice(),
   perf: () => ({ level: perfLevel, partBudget: partBudget(), enemyBudget: enemyBudget() }),
+  missions: () => missions.map(m => ({ id: m.id, n: m.n, name: m.name, done: m.done, bonus: m.bonus })),
+  music: () => ({ ready: !!music.layers, mode: music.mode, gains: { ...music.gains } }),
   setPerf: n => { perfLevel = Math.max(0, Math.min(3, n | 0)); perfAcc = 0; perfN = 0; perfGood = 0; },
   enemyList: () => enemies.items.filter(e => e.alive).map(e => ({ x: e.x, y: e.y, type: e.type, hp: e.hp })),
   gemList: () => gems.items.filter(g => g.alive).map(g => ({ x: g.x, y: g.y, v: g.v })),

@@ -924,6 +924,11 @@ stage.addEventListener('pointermove', e => {
 function ptrUp(e) { if (e.pointerId === ptr.id) { ptr.down = false; ptr.id = null; } }
 stage.addEventListener('pointerup', ptrUp);
 stage.addEventListener('pointercancel', ptrUp);
+// the paused panel overlays the stage, so it must handle the resume tap itself
+document.getElementById('paused').addEventListener('pointerdown', e => {
+  e.preventDefault(); unlockAudio();
+  if (state === 'paused') setState('playing');
+});
 
 document.getElementById('novaBtn').addEventListener('pointerdown', e => {
   e.preventDefault(); e.stopPropagation(); unlockAudio(); fireNova();
