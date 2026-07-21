@@ -3,7 +3,7 @@ Date: 2026-07-20 (updated after batch 2)
 
 ## 1. Purpose & Business Context
 - A mobile-first browser arcade containing two complete games: **TRENCHFOX**, an original
-  trench-network maze-chase, and **NOVA**, an original arena game built on a
+  trench-network maze-chase, and **STARSHELL**, an original arena game built on a
   hunted → charge → reversal → feast loop.
   Everything is plain HTML/CSS/JavaScript with zero dependencies and zero build
   step — each game is one self-contained file that runs in any modern browser.
@@ -22,11 +22,11 @@ Date: 2026-07-20 (updated after batch 2)
   CSP, which blocks all external requests.
 - **Rendering:** Canvas 2D with `devicePixelRatio` scaling; pre-rendered
   offscreen canvases for maze walls and glow sprites; additive compositing for
-  NOVA's look.
+  STARSHELL's look.
 - **Audio:** Web Audio API, fully synthesised (oscillators + generated noise);
   unlocked on first user gesture.
 - **Input:** Touch (swipe + d-pad in TRENCHFOX), Pointer events (drag steering,
-  second-finger / double-tap nova in NOVA), keyboard fallback, vibration
+  second-finger / double-tap nova in STARSHELL), keyboard fallback, vibration
   haptics where supported.
 - **Backend / database / ORM:** None. No server-side code.
 - **Testing:** committed Playwright smoke suite in `tests/` (playwright-core,
@@ -44,7 +44,7 @@ Date: 2026-07-20 (updated after batch 2)
 - Directory structure:
   - `index.html` — arcade hub / launcher with LAUNCH buttons for both games
   - `trenchfox.html` — complete TRENCHFOX (~1150 lines)
-  - `nova.html` — complete NOVA (~990 lines)
+  - `starshell.html` — complete STARSHELL (~990 lines)
   - `tests/` — QA suite (static server, three smoke tests, tuning harness, README)
   - `.github/workflows/pages.yml` — Pages deploy workflow
   - `manifest.webmanifest`, `sw.js`, `icons/` — PWA (installable, offline)
@@ -58,7 +58,7 @@ Date: 2026-07-20 (updated after batch 2)
   SHADOW flank / STRAY erratic) on a scatter-chase schedule; signal flares
   expose the hunt, routed hunters regroup at the dugout; death opens with a
   0.5s full freeze; sector clear = hunters vanish + flare-wash flashes in 2.0s.
-- **NOVA specifics:** continuous-space steering; wave-based difficulty
+- **STARSHELL specifics:** continuous-space steering; wave-based difficulty
   (~24s build / ~6.5s lull cycles, each wave peaking higher; swifts from wave 2,
   hunters from wave 3); hunters attack in telegraphed cycles (stalk → 0.4s
   flare + audio wind-up with hard braking → straight lunge locked at launch →
@@ -71,8 +71,8 @@ Date: 2026-07-20 (updated after batch 2)
 ## 4. Data Model
 No database. All persistence is browser `localStorage`, per-device:
 - TRENCHFOX: `trenchfox-high` (int), `trenchfox-muted` ('1'/'0')
-- NOVA (JSON via a `store` wrapper, `nova-` prefix): `nova-best`, `nova-muted`,
-  `nova-streak`, `nova-lastDaily` (YYYY-MM-DD), `nova-daily-<YYYY-MM-DD>`
+- STARSHELL (JSON via a `store` wrapper, `starshell-` prefix; legacy `nova-*` saves migrate on first load): `starshell-best`, `starshell-muted`,
+  `starshell-streak`, `starshell-lastDaily`, `starshell-daily-<YYYY-MM-DD>`
   (per-day best; yesterday's value feeds the menu display)
 
 ## 5. Features — Current State
@@ -81,12 +81,12 @@ No database. All persistence is browser `localStorage`, per-device:
 | TRENCHFOX: 3 rotating trench layouts, dispatches, flares, 4 hunters | Done | Covered by tests/trenchfox.test.js |
 | TRENCHFOX: swipe + d-pad + keyboard, late-swipe corner forgiveness | Done | Corner cut asserted to snap to corridor centre |
 | TRENCHFOX: 0.5s death freeze, sector-clear flare wash | Done | Timing asserted in tests |
-| NOVA: steering, motes, combos, graze ring | Done | |
-| NOVA: graze combo (×1→×2.5 charge) with HUD readout | Done | ×2.5 never observed in bot play — see §10 |
-| NOVA: CLOSE CALL bonus + flourish | Done | 5/5 on deliberate point-blank dives, 1/5 incidental |
-| NOVA: telegraphed hunter lunges | Done | All observed lunges preceded by ~0.4s wind-up |
-| NOVA: wave pacing (build/lull, ambient cues) | Done | Lull ≈36% lower spawn rate than late build |
-| NOVA: daily challenge, streaks, share card | Done | Menu shows streak / today / yesterday |
+| STARSHELL: steering, motes, combos, graze ring | Done | |
+| STARSHELL: graze combo (×1→×2.5 charge) with HUD readout | Done | ×2.5 never observed in bot play — see §10 |
+| STARSHELL: CLOSE CALL bonus + flourish | Done | 5/5 on deliberate point-blank dives, 1/5 incidental |
+| STARSHELL: telegraphed hunter lunges | Done | All observed lunges preceded by ~0.4s wind-up |
+| STARSHELL: wave pacing (build/lull, ambient cues) | Done | Lull ≈36% lower spawn rate than late build |
+| STARSHELL: daily challenge, streaks, share card | Done | Menu shows streak / today / yesterday |
 | Arcade hub with LAUNCH buttons | Done | |
 | GitHub Pages deployment | **Live** | Auto-deploys on push to main; run #10 green |
 | Committed QA suite (`npm test`) | Done | 3 suites, all green; fails on any console error |
@@ -94,7 +94,7 @@ No database. All persistence is browser `localStorage`, per-device:
 
 ## 6. API Surface
 Not applicable — static pages only. Each game exposes a debug hook
-(`window.__trenchfox`, `window.__nova`) with read-only snapshots and test-only
+(`window.__trenchfox`, `window.__starshell`) with read-only snapshots and test-only
 triggers (press/kill/winLevel; charge/boom/kill/spawnHunter/spawns). Harmless
 in production; used by the QA suite.
 
@@ -112,7 +112,7 @@ in production; used by the QA suite.
   fails on any console/page error. `tests/tune.js` runs bot-driven balance
   sessions.
 - **Not covered:** real-device iOS Safari (all testing is emulated-mobile
-  Chromium), `navigator.share` on device, NOVA behaviour past wave 4 (~90s+ —
+  Chromium), `navigator.share` on device, STARSHELL behaviour past wave 4 (~90s+ —
   bots rarely survive that long), long-session performance on low-end phones.
 - **Known bugs:** none currently known.
 - **Technical debt (specific):**
@@ -129,7 +129,7 @@ in production; used by the QA suite.
   (see `tests/README.md`).
 - **Deployment:** push to `main` → Pages workflow deploys the repo root →
   live at `https://9c5wdmytbt-glitch.github.io/petbook/` (hub), with
-  `/trenchfox.html` and `/nova.html` direct. `tests/` deploys as inert static
+  `/trenchfox.html` and `/starshell.html` direct. `tests/` deploys as inert static
   files. Note: the `github-pages` environment only accepts deploys from the
   default branch (`main`).
 
@@ -156,8 +156,8 @@ Recent work (batch 2, newest first — one commit per item):
 2. `f4f19dd` committed QA suite under `tests/`
 3. `fde0f41` maze game level-clear celebration
 4. `177a0e9` maze game half-second death freeze
-5. `8b2f190` NOVA wave-based difficulty pacing
-6. `6df94fb` NOVA telegraphed hunter lunges
+5. `8b2f190` STARSHELL wave-based difficulty pacing
+6. `6df94fb` STARSHELL telegraphed hunter lunges
 Earlier (batch 1): corner forgiveness, graze combo, CLOSE CALL, daily hook;
 before that: both games, hub, Pages deploy (live since run #8).
 

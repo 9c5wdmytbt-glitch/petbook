@@ -10,7 +10,7 @@ const { BASE_URL, launch, assert, finish } = require('./lib');
 
   await page.tap('a.launch >> nth=0');
   await page.waitForTimeout(400);
-  assert((await page.title()) === 'NOVA', 'first LAUNCH opens NOVA');
+  assert((await page.title()) === 'STARSHELL', 'first LAUNCH opens STARSHELL');
   await page.goBack();
   await page.waitForTimeout(300);
 

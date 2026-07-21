@@ -1,12 +1,12 @@
 'use strict';
 /* Petbook Arcade service worker: network-first with cache fallback, so
    updates always land when online and everything still plays offline. */
-const CACHE = 'petbook-arcade-v2';
+const CACHE = 'petbook-arcade-v3';
 const ASSETS = [
   './',
   'index.html',
   'trenchfox.html',
-  'nova.html',
+  'starshell.html',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',

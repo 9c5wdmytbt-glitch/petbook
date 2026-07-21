@@ -32,10 +32,10 @@ const { BASE_URL, launch, assert, finish } = require('./lib');
   await page.reload();
   await page.waitForTimeout(400);
   assert((await page.title()) === 'Petbook Arcade', 'hub loads offline');
-  await page.goto(BASE_URL + '/nova.html');
+  await page.goto(BASE_URL + '/starshell.html');
   await page.waitForTimeout(500);
-  const snap = await page.evaluate(() => window.__nova && window.__nova.snap());
-  assert(snap && snap.state === 'menu', 'NOVA boots offline from the SW cache');
+  const snap = await page.evaluate(() => window.__starshell && window.__starshell.snap());
+  assert(snap && snap.state === 'menu', 'STARSHELL boots offline from the SW cache');
   await page.context().setOffline(false);
 
   await finish(browser, errors, 'pwa.test');

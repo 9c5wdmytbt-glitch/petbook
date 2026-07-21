@@ -1,7 +1,7 @@
 # Petbook Arcade — QA suite
 
 Playwright smoke tests for both games and the hub, driven through the games'
-built-in debug hooks (`window.__trenchfox`, `window.__nova`).
+built-in debug hooks (`window.__trenchfox`, `window.__starshell`).
 
 ## Run
 
@@ -17,8 +17,9 @@ CHROMIUM_PATH=/path/to/chrome-or-chromium npm test
 - `trenchfox.test.js` — boot, input, scoring, late-swipe corner cut, flare
   exposure, death freeze, all three maze layouts (rotation + reachability),
   pause/resume
-- `nova.test.js` — boot, steering, scoring, hunter telegraph, nova + chain,
-  death, retry, daily mode, `nova-` storage-key hygiene
+- `starshell.test.js` — legacy-save migration, boot, steering, scoring,
+  hunter telegraph, shell burst + chain, death, retry, daily mode,
+  `starshell-` storage-key hygiene
 - `hub.test.js` — hub launch buttons navigate to both games
 
 Every test also fails on any console/page error.
@@ -29,7 +30,7 @@ attempted.
 
 ## Tuning harness (optional)
 
-`node tune.js [seconds]` runs a bot-driven NOVA session (default 200s) and
+`node tune.js [seconds]` runs a bot-driven STARSHELL session (default 200s) and
 prints balance numbers: survival, graze-combo attainment, CLOSE CALL rate on
 aggressive novas, and spawn-rate relief during wave lulls. It is not part of
 `npm test`.

@@ -1,5 +1,5 @@
 'use strict';
-/* Tuning session harness (not part of `npm test`): runs a bot-driven NOVA
+/* Tuning session harness (not part of `npm test`): runs a bot-driven STARSHELL
    session and reports balance numbers — graze combo attainment, CLOSE CALL
    rate on aggressive novas, wave lull relief, survival. Run directly:
      BASE_URL=... CHROMIUM_PATH=... node tune.js [seconds]           */
@@ -9,7 +9,7 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
 
 (async () => {
   const { browser, page, errors } = await launch();
-  await page.goto(BASE_URL + '/nova.html');
+  await page.goto(BASE_URL + '/starshell.html');
   await page.waitForTimeout(500);
   await page.tap('#btnEndless');
   await page.waitForTimeout(400);
@@ -22,10 +22,10 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
     };
     let lastT = 0, novaPlan = null, planT = 0, aggressiveToggle = false;
     window.__bot = setInterval(() => {
-      const s = window.__nova.snap();
+      const s = window.__starshell.snap();
       const M = window.__tune;
       if (s.state === 'gameover') {
-        M.spawnSets.push(window.__nova.spawns());
+        M.spawnSets.push(window.__starshell.spawns());
         document.getElementById('btnRetry').click();
         novaPlan = null;
         return;
@@ -38,7 +38,7 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
       if (s.grazeMult >= 2.5) M.mult25Hits++;
 
       const p = s.player;
-      const all = window.__nova.shadePos();
+      const all = window.__starshell.shadePos();
       const hostiles = all.filter(o => !o.warn && !o.fright);
       let vx = 0, vy = 0;
 
@@ -61,8 +61,8 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
         // alternate immediate vs aggressive (dive close before firing)
         if (!novaPlan) { aggressiveToggle = !aggressiveToggle; novaPlan = aggressiveToggle ? 'aggressive' : 'immediate'; planT = s.time; }
         if (novaPlan === 'immediate') {
-          window.__nova.boom();
-          setTimeout(() => M.novas.push({ type: 'immediate', close: window.__nova.snap().lastNovaClose }), 80);
+          window.__starshell.boom();
+          setTimeout(() => M.novas.push({ type: 'immediate', close: window.__starshell.snap().lastNovaClose }), 80);
           novaPlan = null;
         } else {
           const near = hostiles.slice().sort((a, b) =>
@@ -71,15 +71,15 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
             const d = Math.hypot(near.x - p.x, near.y - p.y);
             vx = (near.x - p.x); vy = (near.y - p.y); // dive
             if (d < 65) { // inside the ~66px close-call radius, above contact
-              window.__nova.boom();
-              setTimeout(() => M.novas.push({ type: 'aggressive', close: window.__nova.snap().lastNovaClose }), 80);
+              window.__starshell.boom();
+              setTimeout(() => M.novas.push({ type: 'aggressive', close: window.__starshell.snap().lastNovaClose }), 80);
               novaPlan = null;
             } else if (s.time - planT > 2.2) {
-              window.__nova.boom();
-              setTimeout(() => M.novas.push({ type: 'bailed', close: window.__nova.snap().lastNovaClose }), 80);
+              window.__starshell.boom();
+              setTimeout(() => M.novas.push({ type: 'bailed', close: window.__starshell.snap().lastNovaClose }), 80);
               novaPlan = null;
             }
-          } else { window.__nova.boom(); novaPlan = null; }
+          } else { window.__starshell.boom(); novaPlan = null; }
         }
       } else {
         // graze farm: thread between two nearest shades when moderately safe
@@ -91,7 +91,7 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
           vx += ((near[0].x + near[1].x) / 2 - p.x) / 60;
           vy += ((near[0].y + near[1].y) / 2 - p.y) / 60;
         }
-        const motes = window.__nova.motePos();
+        const motes = window.__starshell.motePos();
         if (motes.length) {
           let bm = motes[0], bd = 1e9;
           for (const m of motes) { const d = Math.hypot(m.x - p.x, m.y - p.y); if (d < bd) { bd = d; bm = m; } }
@@ -108,8 +108,8 @@ const SECONDS = Number(process.argv[2] || process.env.TUNE_SECONDS || 200);
   await page.waitForTimeout(SECONDS * 1000);
   const M = await page.evaluate(() => {
     clearInterval(window.__bot);
-    window.__tune.spawnSets.push(window.__nova.spawns());
-    window.__tune.finalRun = window.__nova.snap().time;
+    window.__tune.spawnSets.push(window.__starshell.spawns());
+    window.__tune.finalRun = window.__starshell.snap().time;
     return window.__tune;
   });
 

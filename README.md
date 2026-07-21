@@ -8,21 +8,21 @@
 
 **[Launch the arcade &rarr;](https://9c5wdmytbt-glitch.github.io/petbook/)** — a hub page
 ([`index.html`](index.html)) with launch buttons for both games. Direct links:
-[NOVA](https://9c5wdmytbt-glitch.github.io/petbook/nova.html) ·
+[STARSHELL](https://9c5wdmytbt-glitch.github.io/petbook/starshell.html) ·
 [TRENCHFOX](https://9c5wdmytbt-glitch.github.io/petbook/trenchfox.html)
 _(links go live once GitHub Pages is enabled)_
 
-## NOVA (mobile)
+## STARSHELL (mobile)
 
-An original one-thumb arena game: [`nova.html`](nova.html). One
+An original one-thumb arena game: [`starshell.html`](starshell.html). One
 self-contained file, no dependencies.
 
 You are a spark of light hunted by a growing swarm. Drag to steer, collect light
-motes to charge your nova, graze the swarm for bonus charge — then unleash it and
+motes to charge your star shell, graze the swarm for bonus charge — then fire it and
 the hunters flee while you feast on them for chained points (200-400-800-1600 style).
 
 - One-thumb drag steering, near-miss "graze" risk-reward, charge-and-reversal core loop
-- Graze combos multiply charge rate; point-blank **CLOSE CALL** novas boost the feast
+- Graze combos multiply charge rate; point-blank **CLOSE CALL** bursts boost the feast
 - Wave-based pacing: pressure builds, a brief lull, then a higher peak — with
   telegraphed hunter lunges you can sidestep
 - Juice: particles, shockwaves, hit-stop slow-mo, screen shake, haptics, synth audio

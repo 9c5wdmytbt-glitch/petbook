@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#04040c">
+<meta name="theme-color" content="#050810">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<title>NOVA</title>
+<title>STARSHELL</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
   html, body {
     height: 100%;
-    background: #04040c;
+    background: #050810;
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
     -webkit-touch-callout: none;
@@ -29,7 +29,7 @@
     position: fixed; inset: 0; z-index: 10;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 18px; text-align: center;
-    background: rgba(4,4,12,.72);
+    background: rgba(5,8,16,.74);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
     padding: 24px calc(env(safe-area-inset-right) + 24px) calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   }
@@ -115,13 +115,13 @@
 <body>
 <div id="stage"><canvas id="cv"></canvas></div>
 
-<button id="novaBtn">NOVA</button>
+<button id="novaBtn">FIRE</button>
 <div id="grazeMult"></div>
 <button id="muteBtn">&#128266;</button>
 
 <div class="panel" id="menu">
-  <div class="title">NOVA</div>
-  <div class="tagline">Outrun the swarm. Charge the nova.<br>Then turn the hunt around.</div>
+  <div class="title">STARSHELL</div>
+  <div class="tagline">Outrun the swarm. Charge the star shell.<br>Then light the field and feast.</div>
   <div class="btn-row" style="flex-direction:column">
     <button class="primary" id="btnEndless">ENDLESS RUN</button>
     <button id="btnDaily">DAILY CHALLENGE</button>
@@ -130,7 +130,7 @@
   <div class="howto">
     DRAG anywhere to steer &middot; collect light to charge<br>
     GRAZE the swarm &mdash; near misses charge faster<br>
-    NOVA when full &mdash; the swarm flees. Feast.
+    FIRE when full &mdash; the shell bursts, the field is lit. Feast.
   </div>
 </div>
 
@@ -210,19 +210,37 @@ function drawGlow(color, x, y, r) {
 const C = {
   playerGlow: 'rgba(255,214,106,1)',
   moteGlow:   'rgba(255,180,77,1)',
-  shadeGlow:  'rgba(154,107,255,1)',
-  swiftGlow:  'rgba(255,91,203,1)',
-  huntGlow:   'rgba(255,77,77,1)',
-  frightGlow: 'rgba(77,125,255,1)',
+  shadeGlow:  'rgba(122,143,208,1)',
+  swiftGlow:  'rgba(186,200,255,1)',
+  huntGlow:   'rgba(255,106,64,1)',
+  frightGlow: 'rgba(255,226,168,1)',
   whiteGlow:  'rgba(240,244,255,1)',
 };
 
 /* ================================================================== */
 /*  Persistent data                                                   */
 /* ================================================================== */
+// One-time migration from this game's earlier name: copy any nova-* saves
+// to starshell-* so nobody loses a best score or a daily streak.
+try {
+  if (localStorage.getItem('starshell-best') === null) {
+    const legacy = []; // collect first: writing while index-walking reorders keys
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('nova-') === 0) legacy.push(k);
+    }
+    for (const k of legacy) {
+      const nk = 'starshell-' + k.slice(5);
+      if (localStorage.getItem(nk) === null) {
+        localStorage.setItem(nk, localStorage.getItem(k));
+      }
+    }
+  }
+} catch (e) {}
+
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('nova-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem('nova-' + k, JSON.stringify(v)); } catch (e) {} },
+  get(k, d) { try { const v = localStorage.getItem('starshell-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('starshell-' + k, JSON.stringify(v)); } catch (e) {} },
 };
 let best = store.get('best', 0);
 let muted = store.get('muted', false);
@@ -338,9 +356,9 @@ function spawnShade(burst, forceType) {
   else { x = W - m; y = rng() * H; }
   const type = forceType || shadeType();
   const spec = {
-    shade:  { speed: (205 + Math.min(115, (wave - 1) * 9 + wavePressure * 22)) * S, r: 11 * S, glow: C.shadeGlow, core: '#c9adff', pts: 1 },
-    swift:  { speed: (300 + Math.min(60, (wave - 1) * 6)) * S, r: 9 * S,  glow: C.swiftGlow, core: '#ffb8e8', pts: 1 },
-    hunter: { speed: 255 * S, r: 13 * S, glow: C.huntGlow,  core: '#ffb3a6', pts: 1 },
+    shade:  { speed: (205 + Math.min(115, (wave - 1) * 9 + wavePressure * 22)) * S, r: 11 * S, glow: C.shadeGlow, core: '#b9c8e8', pts: 1 },
+    swift:  { speed: (300 + Math.min(60, (wave - 1) * 6)) * S, r: 9 * S,  glow: C.swiftGlow, core: '#dfe6ff', pts: 1 },
+    hunter: { speed: 255 * S, r: 13 * S, glow: C.huntGlow,  core: '#ffb89a', pts: 1 },
   }[type];
   dbgSpawns.push(time); if (dbgSpawns.length > 900) dbgSpawns.shift();
   shades.push({
@@ -542,7 +560,7 @@ function update(dt) {
         const pts = 100 << Math.min(chainIdx, 4);
         chainIdx++;
         bestChain = Math.max(bestChain, chainIdx);
-        addScore(pts, sh.x, sh.y, String(pts), '#4dd6ff');
+        addScore(pts, sh.x, sh.y, String(pts), '#ffe9b8');
         burst(sh.x, sh.y, 14, C.frightGlow, 260);
         timeScale = 0.18; // hit-stop
         shake = Math.max(shake, 6);
@@ -581,7 +599,7 @@ function addMeter(v) {
   if (novaT > 0) return; // no charging while the nova burns
   meter = Math.min(1, meter + v);
   if (was < 1 && meter >= 1) {
-    banner = { text: 'NOVA READY', t: 1.6, color: '#ffd76a' };
+    banner = { text: 'SHELL READY', t: 1.6, color: '#ffd76a' };
     sfx.ready();
     vibrate(40);
   }
@@ -617,7 +635,7 @@ function fireNova() {
     vibrate([40, 40, 60]);
     sfx.closeCall();
   } else {
-    banner = { text: 'FEAST', t: 1.2, color: '#4dd6ff' };
+    banner = { text: 'FEAST', t: 1.2, color: '#ffe9b8' };
     vibrate(60);
   }
   sfx.nova();
@@ -674,7 +692,7 @@ function draw() {
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
 
   // ground
-  ctx.fillStyle = '#04040c';
+  ctx.fillStyle = '#050810';
   ctx.fillRect(-30, -30, W + 60, H + 60);
   ctx.fillStyle = '#fff';
   for (const st of stars) {
@@ -684,7 +702,7 @@ function draw() {
   ctx.globalAlpha = 1;
 
   // arena border (brightens briefly as a new wave rolls in)
-  ctx.strokeStyle = novaT > 0 ? 'rgba(77,125,255,.5)'
+  ctx.strokeStyle = novaT > 0 ? 'rgba(255,214,106,.55)'
     : 'rgba(120,110,255,' + (0.22 + wavePulse * 0.45) + ')';
   ctx.lineWidth = 2;
   ctx.strokeRect(4, 4, W - 8, H - 8);
@@ -722,7 +740,7 @@ function draw() {
       ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r * (2.8 - wp * 1.3), 0, 7); ctx.stroke();
     }
     drawGlow(g, sh.x, sh.y, sh.r * 3.2 * wob);
-    ctx.fillStyle = fr ? (flick ? '#eef4ff' : '#9db8ff') : sh.core;
+    ctx.fillStyle = fr ? (flick ? '#ffffff' : '#ffe4b0') : sh.core;
     ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r * wob, 0, 7); ctx.fill();
     // eyes — toward the player, or wide with fear
     const edx = player.x - sh.x, edy = player.y - sh.y;
@@ -791,9 +809,9 @@ function draw() {
   ctx.fillStyle = '#9aa0c8';
   ctx.fillText(fmtTime(time), W / 2, safeTop + 44 * S);
   if (novaT > 0) {
-    ctx.fillStyle = '#4dd6ff';
+    ctx.fillStyle = '#ffd76a';
     ctx.font = '800 ' + Math.round(14 * S) + 'px -apple-system, "Segoe UI", sans-serif';
-    ctx.fillText('NOVA ' + novaT.toFixed(1) + 's', W / 2, safeTop + 64 * S);
+    ctx.fillText('SHELL ' + novaT.toFixed(1) + 's', W / 2, safeTop + 64 * S);
   } else if (combo >= 3) {
     ctx.fillStyle = '#ffd76a';
     ctx.font = '800 ' + Math.round(15 * S) + 'px -apple-system, "Segoe UI", sans-serif';
@@ -920,7 +938,7 @@ document.getElementById('btnDaily').addEventListener('click', () => { unlockAudi
 document.getElementById('btnRetry').addEventListener('click', () => { unlockAudio(); newRun(mode); });
 document.getElementById('btnMenu').addEventListener('click', () => setState('menu'));
 document.getElementById('btnShare').addEventListener('click', async () => {
-  const text = 'NOVA — ' + score.toLocaleString() + ' pts · ×' + bestChain +
+  const text = 'STARSHELL — ' + score.toLocaleString() + ' pts · ×' + bestChain +
     ' chain · ' + fmtTime(time) + ' survived' +
     (mode === 'daily' ? ' · Daily ' + todayKey() + (streak >= 1 ? ' · ' + streak + '-day streak' : '') : '');
   try {
@@ -977,7 +995,7 @@ function tickNovaBtn() {
     shownFill = deg;
     novaBtn.style.setProperty('--fill', deg + 'deg');
     novaBtn.classList.toggle('ready', f >= 1);
-    novaBtn.textContent = f >= 1 ? 'NOVA' : (novaT > 0 ? '...' : Math.round(f * 100) + '%');
+    novaBtn.textContent = f >= 1 ? 'FIRE' : (novaT > 0 ? '...' : Math.round(f * 100) + '%');
   }
   const gm = grazeMult();
   const show = state === 'playing' && grazeCombo >= 2;
@@ -1003,7 +1021,7 @@ function frame(ts) {
 document.getElementById('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;';
 
 // debug/testing hook
-window.__nova = {
+window.__starshell = {
   snap: () => ({ state, mode, score, best, time, meter, novaT, combo, bestChain,
                  wave, waveLull, wavePressure,
                  grazeCombo, grazeMult: grazeMult(), lastNovaClose,
