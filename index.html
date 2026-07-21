@@ -11,7 +11,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     min-height: 100%;
-    background: #04040c;
+    background: #050810;
     color: #dfe3ff;
     font-family: -apple-system, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-tap-highlight-color: transparent;
@@ -21,10 +21,14 @@
     gap: 26px;
     padding: calc(env(safe-area-inset-top) + 44px) 20px calc(env(safe-area-inset-bottom) + 40px);
     background:
-      radial-gradient(1000px 500px at 50% -200px, rgba(90,80,255,.12), transparent 70%),
-      #04040c;
+      radial-gradient(1000px 500px at 50% -200px, rgba(255,214,106,.07), transparent 70%),
+      radial-gradient(700px 400px at 50% 110%, rgba(90,100,255,.08), transparent 70%),
+      #050810;
   }
   header { text-align: center; }
+  header .tagline {
+    margin-top: 10px; font-size: 10.5px; letter-spacing: 2.5px; color: #6a7090;
+  }
   h1 {
     font-size: 15px; font-weight: 800; letter-spacing: 9px; margin-left: 9px;
     color: #9aa0c8;
@@ -79,6 +83,7 @@
   <header>
     <h1>PETBOOK</h1>
     <div class="marquee">ARCADE</div>
+    <div class="tagline">TWO TALES OF THE NIGHT &mdash; RUN THE TRENCHES, LIGHT THE SKY</div>
   </header>
   <main>
     <div class="card">

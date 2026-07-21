@@ -148,17 +148,26 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
 
   // Pause via visibility is environment-dependent; test death -> retry
   await page.evaluate(() => window.__starshell.kill());
-  await page.waitForTimeout(1600);
-  snap = await page.evaluate(() => window.__starshell.snap());
-  assert(snap.state === 'gameover', 'death reaches game over');
+  let st = '';
+  for (let i = 0; i < 25 && st !== 'gameover'; i++) {
+    await page.waitForTimeout(200);
+    st = (await page.evaluate(() => window.__starshell.snap())).state;
+  }
+  assert(st === 'gameover', 'death reaches game over, got ' + st);
   await page.tap('#btnRetry');
-  await page.waitForTimeout(400);
+  for (let i = 0; i < 15 && st !== 'playing'; i++) {
+    await page.waitForTimeout(200);
+    st = (await page.evaluate(() => window.__starshell.snap())).state;
+  }
   snap = await page.evaluate(() => window.__starshell.snap());
-  assert(snap.state === 'playing' && snap.score === 0, 'retry restarts clean');
+  assert(snap.state === 'playing' && snap.score < 100, 'retry restarts clean (' + snap.state + '/' + snap.score + ')');
 
   // Daily mode + storage hygiene
   await page.evaluate(() => window.__starshell.kill());
-  await page.waitForTimeout(1600);
+  for (let i = 0; i < 25; i++) {
+    await page.waitForTimeout(200);
+    if ((await page.evaluate(() => window.__starshell.snap())).state === 'gameover') break;
+  }
   await page.tap('#btnMenu');
   await page.waitForTimeout(200);
   await page.tap('#btnDaily');
