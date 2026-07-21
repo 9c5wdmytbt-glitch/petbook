@@ -157,5 +157,71 @@ function checkMaze(rows, label) {
   snap = await page.evaluate(() => window.__trenchfox.snapshot());
   assert(snap.state === 'playing', 'resume works');
 
+  // Natural sector clear: reduce the board to the 2 nearest dispatches and
+  // let a BFS-pathing bot eat them for real — the levelclear must come from
+  // the genuine last-dispatch path, not the winLevel shortcut.
+  const natural = await page.evaluate(() => new Promise(resolve => {
+    window.__trenchfox.eatAllBut(2);
+    const start = window.__trenchfox.snapshot();
+    const maze = window.__trenchfox.maze();
+    const pass = (r, c) => {
+      if (r === 14 && (c < 0 || c >= 28)) return true;
+      return r >= 0 && r < 31 && c >= 0 && c < 28 && maze[r][c] !== '#' && maze[r][c] !== '-';
+    };
+    // BFS next-step toward the nearest remaining dispatch
+    const nextDir = (fr, fc, targets) => {
+      const key = (r, c) => r * 28 + ((c + 28) % 28);
+      const tset = new Set(targets.map(t => key(t.r, t.c)));
+      const prev = new Map();
+      const q = [[fr, fc]];
+      prev.set(key(fr, fc), null);
+      while (q.length) {
+        const [r, c] = q.shift();
+        if (tset.has(key(r, c))) {
+          let cur = [r, c], par = prev.get(key(r, c));
+          while (par && prev.get(key(par[0], par[1])) !== null) { cur = par; par = prev.get(key(par[0], par[1])); }
+          if (!par) return null; // already on target
+          const dr = cur[0] - fr;
+          let dc = cur[1] - fc;
+          if (dc > 1) dc -= 28;          // crawl-through wrap
+          if (dc < -1) dc += 28;
+          if (dr === 1) return 'down';
+          if (dr === -1) return 'up';
+          return dc === 1 ? 'right' : 'left';
+        }
+        for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          let nr = r + dr, nc = c + dc;
+          if (nr === 14) nc = (nc + 28) % 28;
+          if (pass(nr, nc) && !prev.has(key(nr, nc))) { prev.set(key(nr, nc), [r, c]); q.push([nr, nc]); }
+        }
+      }
+      return null;
+    };
+    const iv = setInterval(() => {
+      const s = window.__trenchfox.snapshot();
+      if (s.state === 'levelclear' || (s.state === 'ready' && s.level > start.level)) {
+        clearInterval(iv);
+        resolve({ ok: true, dotsAtSetup: start.dots });
+        return;
+      }
+      if (s.state !== 'playing') return;
+      // survive: if a hunter is close, flare escape hatch
+      // (cheap and rare; the point of this test is the clear path)
+      const fr = Math.floor(s.pac.y), fc = Math.floor(s.pac.x);
+      const near = s.ghosts.some(g => g.state === 'active' && !g.fright &&
+        Math.abs(g.x - s.pac.x) + Math.abs(g.y - s.pac.y) < 4);
+      if (near && s.frightTimer <= 0) window.__trenchfox.flare();
+      // remaining dispatches from the live grid via maze()? snapshot has dots;
+      // recompute targets by asking the page grid through eatAllBut(999)? No:
+      // track via a scan hook — simplest: scan DOM-side each tick
+      const targets = window.__trenchfox.dispatches();
+      if (!targets.length) return;
+      const d = nextDir(fr, fc, targets);
+      if (d) window.__trenchfox.press(d);
+    }, 110);
+    setTimeout(() => { clearInterval(iv); resolve({ ok: false }); }, 25000);
+  }));
+  assert(natural.ok, 'eating the last dispatch triggers the real sector clear');
+
   await finish(browser, errors, 'trenchfox.test');
 })().catch(e => { console.error('FAIL trenchfox.test:', e.message); process.exit(1); });
