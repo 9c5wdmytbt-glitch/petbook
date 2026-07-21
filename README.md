@@ -74,6 +74,16 @@ signal flare goes up the four hunters are exposed and can be run down.
 - Signal flares expose the hunt; routed hunters regroup at their dugout
 - Sectors speed up, supply-crate bonuses, extra life at 10,000, persistent best
 
+## Shared arcade systems
+
+All three games feed one **arcade rank** (`arcade-xp`, shown on the hub and
+on every game-over screen), roll three **session missions** per run that
+rotate on the daily seed and pay arcade XP, and play a **dynamic three-layer
+synth soundtrack** themed per game (march/tension/triumph in the trenches,
+calm/pressure/release + heartbeat under the stars, calm/pressure/last-stand
+holding the line) — with the same reward juice throughout: floating popups,
+escalating pickup pitch, big-moment callouts, and a near-death vignette.
+
 ## Tests
 
 A Playwright smoke suite lives in [`tests/`](tests/) — see

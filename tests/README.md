@@ -16,11 +16,15 @@ CHROMIUM_PATH=/path/to/chrome-or-chromium npm test
 (override with `PORT`) and runs every `*.test.js` in sequence:
 
 - `trenchfox.test.js` — boot, input, scoring, late-swipe corner cut, flare
-  exposure, death freeze, all three maze layouts (rotation + reachability),
-  pause/resume
+  exposure, dynamic-music triumph mode, ROUTED callouts, session-mission
+  determinism + paid completion, death freeze, all three maze layouts
+  (rotation + reachability), pause/resume, arcade-XP banking + final-life
+  vignette at game over, one-tap retry timing
 - `starshell.test.js` — legacy-save migration, boot, steering, scoring,
-  hunter telegraph, shell burst + chain, death, retry, daily mode,
-  `starshell-` storage-key hygiene
+  hunter telegraph, shell burst + chain (with release-mode music), danger
+  signal (heartbeat + vignette), session-mission determinism + paid
+  completion, death, one-tap retry timing, arcade-XP banking, daily mode,
+  storage-key hygiene (starshell-/arcade- only)
 - `lastflare.test.js` — boot, run start, damage + iframes, the 1-of-3
   promotion flow, session missions, dynamic-music escalation to last stand,
   the performance-degradation ladder, meta persistence across reloads, and

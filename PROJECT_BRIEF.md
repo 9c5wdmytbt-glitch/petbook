@@ -86,6 +86,11 @@ Date: 2026-07-21 (updated after the LAST FLARE flagship launch)
 
 ## 4. Data Model
 No database. All persistence is browser `localStorage`, per-device:
+- Shared: `arcade-xp` — the unified arcade rank/XP pool. All three games
+  award into it (TRENCHFOX score/25 at game over, STARSHELL score/40 plus a
+  first-daily bonus, LAST FLARE run salvage) and it migrates once from the
+  legacy `lastflare-xp` so no progress is lost. Session-mission bonuses in
+  every game also pay into it. The hub header shows the combined rank.
 - TRENCHFOX: `trenchfox-high` (int), `trenchfox-muted` ('1'/'0')
 - STARSHELL (JSON via a `store` wrapper, `starshell-` prefix; legacy `nova-*` saves migrate on first load): `starshell-best`, `starshell-muted`,
   `starshell-streak`, `starshell-lastDaily`, `starshell-daily-<YYYY-MM-DD>`
@@ -119,6 +124,11 @@ No database. All persistence is browser `localStorage`, per-device:
 | LAST FLARE: Daily Operation (seeded) + streaks + share card | Done | Same-date determinism asserted (waves, offers, missions) |
 | LAST FLARE: session missions, dynamic music, near-death vignette | Done | Last-stand escalation asserted |
 | LAST FLARE: perf budget + degradation ladder | Done | Minute-5 bot run p95 16.80ms; caps never exceeded |
+| Arcade-wide: unified rank/XP (arcade-xp), per-game awards + rank on game over | Done | Migration + banking asserted in all suites |
+| Arcade-wide: dynamic music in all three games (per-game themes) | Done | Mode escalation asserted per game |
+| Arcade-wide: juice parity (callouts, escalating pitch, near-death vignette) | Done | ROUTED/danger-signal asserted |
+| Arcade-wide: session missions in all three games (daily-seed rotation) | Done | Determinism + paid completion asserted |
+| Time-to-action: <3s to gameplay, one-tap instant retry, all games | Done | TRENCHFOX READY trimmed 2.0s→1.0s; guarded by tests |
 
 ## 6. API Surface
 Not applicable — static pages only. Each game exposes a debug hook
@@ -183,7 +193,15 @@ frameTimes). Harmless in production; used by the QA suite.
 
 ## 11. Recent Work & Next Steps
 Recent work (newest first):
-1. **LAST FLARE** built and shipped as the arcade flagship in six staged,
+1. **Arcade consistency port** in six commits: LAST FLARE's systems back-
+   ported to the other games — unified arcade rank/XP (`arcade-xp`, with
+   migration), per-game three-layer dynamic music (TRENCHFOX march →
+   tension → triumph; STARSHELL calm → pressure → release + heartbeat),
+   reward-juice parity (callouts, escalating pickup pitch, near-death
+   vignettes), date-rotating session missions paying arcade XP, and a
+   time-to-action pass (TRENCHFOX READY 2.0s→1.0s; cold start 2221→
+   1220ms, retry 2081→1078ms; STARSHELL already instant). SW cache v5.
+2. **LAST FLARE** built and shipped as the arcade flagship in six staged,
    individually tested commits: core run loop → upgrade choice loop → meta
    progression → Daily Operation + adaptive difficulty → performance budget
    with graceful degradation (minute-5 bot run p95 16.80ms at a locked
