@@ -1,5 +1,5 @@
 # PROJECT BRIEF — Petbook Arcade
-Date: 2026-07-20 (updated after batch 2)
+Date: 2026-07-21 (updated after the IP-clean rework)
 
 ## 1. Purpose & Business Context
 - A mobile-first browser arcade containing two complete games: **TRENCHFOX**, an original
@@ -151,15 +151,17 @@ in production; used by the QA suite.
 - **Risk (low):** difficulty beyond wave 4 is extrapolated, not observed.
 
 ## 11. Recent Work & Next Steps
-Recent work (batch 2, newest first — one commit per item):
-1. `b4f6742` tests: pointer-helper + tuning-harness measurement fixes
-2. `f4f19dd` committed QA suite under `tests/`
-3. `fde0f41` maze game level-clear celebration
-4. `177a0e9` maze game half-second death freeze
-5. `8b2f190` STARSHELL wave-based difficulty pacing
-6. `6df94fb` STARSHELL telegraphed hunter lunges
-Earlier (batch 1): corner forgiveness, graze combo, CLOSE CALL, daily hook;
-before that: both games, hub, Pages deploy (live since run #8).
+Recent work (newest first):
+1. IP-clean rework in four staged commits: TRENCHFOX (all-new WWI trench
+   theme, three generated + validated layouts, four renamed/re-behaved
+   hunters, new art and audio, trenchfox-* storage) replaces the earlier
+   maze game; STARSHELL (rename, flare-gold/night-blue palette, and a
+   nova-* to starshell-* save migration) replaces NOVA; night-war hub;
+   service-worker cache v3; test suite renamed and extended (per-layout
+   reachability, flare exposure, migration).
+2. Blank 192/180 PWA icon fix; icons now carry a flare + fox motif.
+3. Earlier: PWA support, committed QA suite, two batches of gameplay
+   polish, initial games + hub + Pages deploy (live since run #8).
 
 Next steps, in priority order:
 1. Human play-test to settle the three flagged tuning decisions (§10).
