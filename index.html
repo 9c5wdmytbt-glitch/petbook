@@ -98,6 +98,7 @@
     <h1>PETBOOK</h1>
     <div class="marquee">ARCADE</div>
     <div class="tagline">THREE TALES OF THE NIGHT &mdash; HOLD THE LINE, RUN THE TRENCHES, LIGHT THE SKY</div>
+    <div class="tagline" id="arcadeRank" style="margin-top:6px;color:#ffd76a"></div>
   </header>
   <main>
     <div class="card headline">
@@ -142,18 +143,25 @@
   </main>
   <footer>NO INSTALL &middot; NO ACCOUNT &middot; PLAYS OFFLINE ONCE LOADED</footer>
 <script>
-// LAST FLARE rank readout (same-origin localStorage; ladder mirrors the game)
+// Combined arcade rank (arcade-* keys, shared by all three games; migrate
+// once from the LAST FLARE-era lastflare-xp so nobody loses progress)
 try {
   const RANKS = [['Private', 0], ['Corporal', 300], ['Sergeant', 800], ['Lieutenant', 1600],
     ['Captain', 3000], ['Major', 5000], ['Colonel', 8000], ['Field Marshal', 12000]];
-  const xp = JSON.parse(localStorage.getItem('lastflare-xp'));
+  if (localStorage.getItem('arcade-xp') === null) {
+    const lf = JSON.parse(localStorage.getItem('lastflare-xp'));
+    if (typeof lf === 'number' && lf > 0) localStorage.setItem('arcade-xp', JSON.stringify(lf));
+  }
+  const xp = JSON.parse(localStorage.getItem('arcade-xp'));
   if (typeof xp === 'number' && xp > 0) {
     let r = RANKS[0][0];
     for (const [name, need] of RANKS) if (xp >= need) r = name;
-    const bank = JSON.parse(localStorage.getItem('lastflare-salvageBank')) || 0;
-    document.getElementById('lfRank').textContent =
-      'RANK: ' + r.toUpperCase() + ' · ' + xp.toLocaleString() + ' XP' +
-      (bank > 0 ? ' · ' + bank.toLocaleString() + ' SALVAGE BANKED' : '');
+    document.getElementById('arcadeRank').textContent =
+      'ARCADE RANK: ' + r.toUpperCase() + ' · ' + xp.toLocaleString() + ' XP';
+  }
+  const bank = JSON.parse(localStorage.getItem('lastflare-salvageBank')) || 0;
+  if (bank > 0) {
+    document.getElementById('lfRank').textContent = bank.toLocaleString() + ' SALVAGE BANKED';
   }
 } catch (e) {}
 

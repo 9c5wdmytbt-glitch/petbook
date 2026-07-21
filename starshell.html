@@ -138,6 +138,7 @@
   <div style="font-size:15px;letter-spacing:6px;color:#9aa0c8">RUN OVER</div>
   <div id="runScore">0</div>
   <div id="runTag"></div>
+  <div id="runRank" style="font-size:12px;letter-spacing:2px;color:#ffd76a"></div>
   <div class="run-stats">
     <span>Survived</span><b id="stTime">0:00</b>
     <span>Best chain</span><b id="stChain">&times;0</b>
@@ -245,6 +246,31 @@ const store = {
 let best = store.get('best', 0);
 let muted = store.get('muted', false);
 let streak = store.get('streak', 0);
+
+/* ---- shared arcade rank/XP (arcade-* keys; one-time migration of the
+   rank XP that originated in LAST FLARE's lastflare-xp) ---- */
+const ARCADE_RANKS = [
+  ['Private', 0], ['Corporal', 300], ['Sergeant', 800], ['Lieutenant', 1600],
+  ['Captain', 3000], ['Major', 5000], ['Colonel', 8000], ['Field Marshal', 12000],
+];
+const arcade = {
+  get xp() { try { const v = localStorage.getItem('arcade-xp'); return v === null ? 0 : (JSON.parse(v) || 0); } catch (e) { return 0; } },
+  set xp(v) { try { localStorage.setItem('arcade-xp', JSON.stringify(v)); } catch (e) {} },
+  migrate() {
+    try {
+      if (localStorage.getItem('arcade-xp') !== null) return;
+      const lf = JSON.parse(localStorage.getItem('lastflare-xp'));
+      if (typeof lf === 'number' && lf > 0) this.xp = lf;
+    } catch (e) {}
+  },
+  add(n) { const v = this.xp + Math.max(0, Math.round(n)); this.xp = v; return v; },
+  rank() {
+    let r = ARCADE_RANKS[0][0];
+    for (const [name, need] of ARCADE_RANKS) if (this.xp >= need) r = name;
+    return r;
+  },
+};
+arcade.migrate();
 
 function todayKey() {
   const d = new Date();
@@ -656,6 +682,7 @@ function finishRun() {
   const isBest = score > best;
   if (isBest) { best = score; store.set('best', best); }
   let tag = isBest ? 'NEW BEST' : '';
+  let xpGain = Math.max(1, Math.round(score / 40));
   if (mode === 'daily') {
     const key = 'daily-' + todayKey();
     const prev = store.get(key, null);
@@ -664,14 +691,18 @@ function finishRun() {
       streak = last === yesterdayKey() ? streak + 1 : 1;
       store.set('streak', streak);
       store.set('lastDaily', todayKey());
+      xpGain += 30; // first daily attempt of the day
     }
     if (prev === null || score > prev) {
       store.set(key, score);
       if (!isBest && prev !== null) tag = 'NEW DAILY BEST';
     }
   }
+  arcade.add(xpGain);
   document.getElementById('runScore').textContent = score.toLocaleString();
   document.getElementById('runTag').textContent = tag;
+  document.getElementById('runRank').textContent =
+    'RANK ' + arcade.rank().toUpperCase() + ' · +' + xpGain + ' XP';
   document.getElementById('stTime').textContent = fmtTime(time);
   document.getElementById('stChain').innerHTML = '&times;' + bestChain;
   document.getElementById('stMotes').textContent = motesEaten;

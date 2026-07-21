@@ -112,6 +112,17 @@ async function dailyProbe(page, date) {
   const bank = await page.evaluate(() => window.__lastflare.meta().bank);
   assert(bank === 1234, 'salvage bank persists across reload');
 
+  // arcade rank migration: legacy lastflare-xp seeds arcade-xp exactly once
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('lastflare-xp', '555'); });
+  await page.reload();
+  await page.waitForTimeout(400);
+  const mig = await page.evaluate(() => ({
+    metaXp: window.__lastflare.meta().xp,
+    arcade: JSON.parse(localStorage.getItem('arcade-xp')),
+  }));
+  assert(mig.metaXp === 555 && mig.arcade === 555,
+    'lastflare-xp migrates into shared arcade-xp (' + JSON.stringify(mig) + ')');
+
   // daily determinism: same date -> identical waves, offers, missions
   const a = await dailyProbe(page, '2026-03-14');
   const b = await dailyProbe(page, '2026-03-14');

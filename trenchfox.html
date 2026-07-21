@@ -279,6 +279,31 @@ try {
   muted = localStorage.getItem('trenchfox-muted') === '1';
 } catch (e) {}
 
+/* ---- shared arcade rank/XP (arcade-* keys; one-time migration of the
+   rank XP that originated in LAST FLARE's lastflare-xp) ---- */
+const ARCADE_RANKS = [
+  ['Private', 0], ['Corporal', 300], ['Sergeant', 800], ['Lieutenant', 1600],
+  ['Captain', 3000], ['Major', 5000], ['Colonel', 8000], ['Field Marshal', 12000],
+];
+const arcade = {
+  get xp() { try { const v = localStorage.getItem('arcade-xp'); return v === null ? 0 : (JSON.parse(v) || 0); } catch (e) { return 0; } },
+  set xp(v) { try { localStorage.setItem('arcade-xp', JSON.stringify(v)); } catch (e) {} },
+  migrate() {
+    try {
+      if (localStorage.getItem('arcade-xp') !== null) return;
+      const lf = JSON.parse(localStorage.getItem('lastflare-xp'));
+      if (typeof lf === 'number' && lf > 0) this.xp = lf;
+    } catch (e) {}
+  },
+  add(n) { const v = this.xp + Math.max(0, Math.round(n)); this.xp = v; return v; },
+  rank() {
+    let r = ARCADE_RANKS[0][0];
+    for (const [name, need] of ARCADE_RANKS) if (this.xp >= need) r = name;
+    return r;
+  },
+};
+arcade.migrate();
+
 /* ------------------------------------------------------------------ */
 /*  Entities                                                          */
 /* ------------------------------------------------------------------ */
@@ -500,7 +525,11 @@ function killPac() {
   deathFxDone = false;
 }
 
+let lastXpGain = 0;
 function gameOver() {
+  // arcade XP: score already folds in dispatches, routs and sector bonuses
+  lastXpGain = Math.max(1, Math.round(score / 25));
+  arcade.add(lastXpGain);
   setState('gameover', 0);
 }
 
@@ -952,6 +981,8 @@ function updateOverlay() {
     title.textContent = 'CAUGHT';
     ov.classList.add('over');
     msg.innerHTML = 'Score: ' + score + (score >= high && score > 0 ? ' &mdash; new high score!' : '') +
+      '<br><span id="ovRank" style="color:#ffd76a;letter-spacing:2px">RANK ' + arcade.rank().toUpperCase() +
+      ' &middot; +' + lastXpGain + ' XP</span>' +
       '<br><br><span class="pulse" style="color:#ffd23f;letter-spacing:3px">TAP TO PLAY AGAIN</span>';
     ov.classList.remove('hidden');
   } else {

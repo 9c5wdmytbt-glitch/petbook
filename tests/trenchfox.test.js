@@ -223,5 +223,30 @@ function checkMaze(rows, label) {
   }));
   assert(natural.ok, 'eating the last dispatch triggers the real sector clear');
 
+  // Arcade XP: run all remaining lives down; game over must bank arcade-xp
+  // and show rank + XP-gained on the overlay
+  await page.waitForTimeout(2500); // let the ready phase finish
+  const xpBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('arcade-xp')) || 0);
+  const over = await page.evaluate(() => new Promise(resolve => {
+    const t0 = performance.now();
+    const iv = setInterval(() => {
+      const s = window.__trenchfox.snapshot();
+      if (s.state === 'gameover') {
+        clearInterval(iv);
+        resolve({
+          msg: document.getElementById('ovMsg').textContent,
+          xp: JSON.parse(localStorage.getItem('arcade-xp')) || 0,
+        });
+        return;
+      }
+      if (s.state === 'playing') window.__trenchfox.kill();
+      if (performance.now() - t0 > 30000) { clearInterval(iv); resolve(null); }
+    }, 400);
+  }));
+  assert(over, 'lives run down to game over');
+  assert(/RANK [A-Z ]+/.test(over.msg) && /\+\d+ XP/.test(over.msg),
+    'game over shows rank + XP gained');
+  assert(over.xp > xpBefore, 'arcade-xp banked (' + xpBefore + ' -> ' + over.xp + ')');
+
   await finish(browser, errors, 'trenchfox.test');
 })().catch(e => { console.error('FAIL trenchfox.test:', e.message); process.exit(1); });

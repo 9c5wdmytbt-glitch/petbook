@@ -182,6 +182,7 @@
   <div style="font-size:15px;letter-spacing:6px;color:#9aa0c8">OVERRUN</div>
   <div id="overScore">0:00</div>
   <div id="overTag"></div>
+  <div id="ovRank" style="font-size:12px;letter-spacing:2px;color:#ffd76a"></div>
   <div class="run-stats">
     <span>Kills</span><b id="ovKills">0</b>
     <span>Level reached</span><b id="ovLevel">1</b>
@@ -336,12 +337,27 @@ let mode = 'endless', dailySeed = 0, dailyMod = null, dailyDate = '';
 let intensity = 1; // endless rubber-band ±20%
 const spawnLog = []; // first spawns, for determinism checks
 
+/* ---- shared arcade rank/XP: promoted to arcade-* keys for all three
+   games; one-time migration keeps XP earned under lastflare-xp ---- */
+const arcade = {
+  get xp() { try { const v = localStorage.getItem('arcade-xp'); return v === null ? 0 : (JSON.parse(v) || 0); } catch (e) { return 0; } },
+  set xp(v) { try { localStorage.setItem('arcade-xp', JSON.stringify(v)); } catch (e) {} },
+  migrate() {
+    try {
+      if (localStorage.getItem('arcade-xp') !== null) return;
+      const lf = JSON.parse(localStorage.getItem('lastflare-xp'));
+      if (typeof lf === 'number' && lf > 0) this.xp = lf;
+    } catch (e) {}
+  },
+};
+arcade.migrate();
+
 const meta = {
   unlocked: store.get('operators', ['scout']),
   operator: store.get('operator', 'scout'),
   perks: store.get('perks', { hp: 0, damage: 0, speed: 0, salvage: 0 }),
   medals: store.get('medals', {}),
-  xp: store.get('xp', 0), // lifetime salvage = account XP
+  xp: arcade.xp, // lifetime salvage = shared arcade XP (arcade-xp)
   perkLvl(id) { return this.perks[id] || 0; },
   rank() {
     let r = RANKS[0][0];
@@ -353,7 +369,7 @@ const meta = {
     store.set('operator', this.operator);
     store.set('perks', this.perks);
     store.set('medals', this.medals);
-    store.set('xp', this.xp);
+    arcade.xp = this.xp;
   },
 };
 function awardMedal(id) {
@@ -1110,6 +1126,8 @@ function endRun(won) {
   document.getElementById('ovKills').textContent = run.kills;
   document.getElementById('ovLevel').textContent = run.level;
   document.getElementById('ovSalvage').textContent = '+' + run.salvage;
+  document.getElementById('ovRank').textContent =
+    'RANK ' + meta.rank().toUpperCase() + ' · +' + run.salvage + ' XP';
   document.getElementById('ovMissions').innerHTML = missionHtml();
   document.getElementById('btnShare').style.display = mode === 'daily' ? '' : 'none';
   setState('gameover');

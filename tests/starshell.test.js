@@ -154,6 +154,12 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
     st = (await page.evaluate(() => window.__starshell.snap())).state;
   }
   assert(st === 'gameover', 'death reaches game over, got ' + st);
+  const rankInfo = await page.evaluate(() => ({
+    line: document.getElementById('runRank').textContent,
+    xp: JSON.parse(localStorage.getItem('arcade-xp')),
+  }));
+  assert(/^RANK [A-Z ]+ · \+\d+ XP$/.test(rankInfo.line), 'game over shows rank + XP gained (' + rankInfo.line + ')');
+  assert(rankInfo.xp > 0, 'arcade-xp banked (' + rankInfo.xp + ')');
   await page.tap('#btnRetry');
   for (let i = 0; i < 15 && st !== 'playing'; i++) {
     await page.waitForTimeout(200);
@@ -177,7 +183,8 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
   await page.evaluate(() => window.__starshell.kill());
   await page.waitForTimeout(1600);
   const keys = await page.evaluate(() => Object.keys(localStorage));
-  assert(keys.every(k => k.startsWith('starshell-') || k.startsWith('nova-')), 'game writes only starshell- keys: ' + keys.join(','));
+  assert(keys.every(k => k.startsWith('starshell-') || k.startsWith('nova-') || k.startsWith('arcade-')),
+    'game writes only starshell-/arcade- keys: ' + keys.join(','));
   assert(keys.some(k => k.startsWith('starshell-daily-')), 'daily result stored under starshell-');
 
   await finish(browser, errors, 'starshell.test');
