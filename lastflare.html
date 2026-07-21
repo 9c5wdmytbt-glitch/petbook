@@ -38,7 +38,7 @@
     color: #eef; text-shadow: 0 0 12px rgba(255,214,106,.3);
   }
   #killsHud {
-    position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 64px;
+    position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: 112px;
     font-size: 14px; font-weight: 800; color: #9aa0c8; letter-spacing: 1px;
     font-variant-numeric: tabular-nums; text-align: right;
   }
@@ -97,6 +97,17 @@
   #overScore { font-size: 46px; font-weight: 800; color: #ffd76a; font-variant-numeric: tabular-nums;
                text-shadow: 0 0 30px rgba(255,190,80,.35); }
   #overTag { font-size: 13px; letter-spacing: 3px; color: #ff8f6a; min-height: 16px; }
+  .card-btn {
+    display: flex; flex-direction: column; gap: 5px; text-align: left;
+    min-width: 0; width: 100%; padding: 13px 16px; border-radius: 16px;
+    background: linear-gradient(180deg, rgba(20,26,48,.95), rgba(10,14,28,.95));
+    border: 1px solid rgba(255,214,106,.35);
+  }
+  .card-btn:active { background: rgba(255,214,106,.18); }
+  .card-btn .cname { font-size: 15px; font-weight: 800; letter-spacing: 1.5px; color: #ffe9b8; }
+  .card-btn .cdesc { font-size: 12px; color: #9aa0c8; letter-spacing: .3px; }
+  .card-btn .pips { font-size: 10px; letter-spacing: 2px; color: #ffd76a; }
+  .card-btn.new .cname::after { content: ' · NEW'; color: #7dff9a; font-size: 11px; }
   .pulse { animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
 </style>
@@ -136,6 +147,11 @@
   </div>
   <button class="primary" id="btnRetry">GO AGAIN</button>
   <button class="small" id="btnMenu">MENU</button>
+</div>
+
+<div class="panel hidden" id="upgrade" style="justify-content:flex-end;padding-bottom:12vh;background:rgba(5,8,16,.55)">
+  <div style="font-size:13px;letter-spacing:5px;color:#ffd76a;margin-bottom:6px">FIELD PROMOTION</div>
+  <div id="cards" style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px"></div>
 </div>
 
 <div class="panel hidden" id="paused">
@@ -218,6 +234,7 @@ let muted = store.get('muted', (function () {
   } catch (e) { return false; }
 })());
 
+const meta = { perkLvl: () => 0 }; // stage 3 replaces with real perks
 const run = {
   t: 0, kills: 0, salvage: 0, level: 1, xp: 0, xpNeed: 6,
   hp: 100, maxHp: 100, inv: 0,
@@ -307,11 +324,16 @@ function nearestEnemy(x, y, maxR) {
 }
 
 /* ================================================================== */
-/*  Weapons (auto-fire; stage 1 ships the rifle, stage 2 the rest)    */
+/*  Weapons: rifle, mortar, flare gun, bayonet — 4 levels each, with  */
+/*  visible transformation per level                                  */
 /* ================================================================== */
+const zones = makePool(24, () => ({ x: 0, y: 0, r: 0, t: 0, max: 0, dps: 0, tick: 0 })); // burning ground
+function dmgMul() { return 1 + meta.perkLvl('damage') * 0.06; }
+
 const WEAPONS = {
   rifle: {
     name: 'Service Rifle', desc: 'Straight shots at the nearest threat',
+    lvlDesc: ['', 'Twin shots', 'Triple burst', 'Five-round fan + piercing rounds'],
     cd: 0.55,
     fire(lvl) {
       const t = nearestEnemy(player.x, player.y, 500);
@@ -320,21 +342,111 @@ const WEAPONS = {
       const d = Math.hypot(dx, dy) || 1;
       player.aimX = dx / d; player.aimY = dy / d;
       const shots = lvl >= 4 ? 5 : lvl >= 3 ? 3 : lvl >= 2 ? 2 : 1;
-      const px = -dy / d, py = dx / d; // perpendicular spread
+      const px = -dy / d, py = dx / d;
       for (let i = 0; i < shots; i++) {
         const off = (i - (shots - 1) / 2) * 10;
         const p = alloc(projs);
         if (!p) break;
         p.x = player.x + px * off; p.y = player.y + py * off;
         p.vx = dx / d * 520; p.vy = dy / d * 520;
-        p.r = 4; p.dmg = 10; p.life = 1.1; p.hostile = false;
+        p.r = 4; p.dmg = 10 * dmgMul(); p.life = 1.1; p.hostile = false;
         p.pierce = lvl >= 4 ? 1 : 0; p.kind = 'bullet';
       }
       sfx.shot();
       return true;
     },
   },
+  mortar: {
+    name: 'Trench Mortar', desc: 'Lobbed shells burst in an area',
+    lvlDesc: ['', 'Wider burst', 'Twin shells', 'Heavier charge, huge burst'],
+    cd: 1.9,
+    fire(lvl) {
+      const t = nearestEnemy(player.x, player.y, 560);
+      if (!t) return false;
+      const shells = lvl >= 3 ? 2 : 1;
+      for (let i = 0; i < shells; i++) {
+        const p = alloc(projs);
+        if (!p) break;
+        const tx = t.x + (i ? (Math.random() - 0.5) * 120 : 0);
+        const ty = t.y + (i ? (Math.random() - 0.5) * 120 : 0);
+        p.x = player.x; p.y = player.y;
+        const d = Math.hypot(tx - player.x, ty - player.y) || 1;
+        const flight = Math.max(0.45, d / 340);
+        p.vx = (tx - player.x) / flight; p.vy = (ty - player.y) / flight;
+        p.r = 6; p.life = flight; p.hostile = false; p.kind = 'shell';
+        p.dmg = (lvl >= 4 ? 34 : 24) * dmgMul();
+        p.pierce = (lvl >= 4 ? 96 : lvl >= 2 ? 78 : 62); // burst radius rides in pierce
+      }
+      sfx.mortar();
+      return true;
+    },
+  },
+  flaregun: {
+    name: 'Flare Gun', desc: 'Ignites the ground in a burning zone',
+    lvlDesc: ['', 'Wider burn', 'Twin flares', 'Longer, fiercer burn'],
+    cd: 3.2,
+    fire(lvl) {
+      const t = nearestEnemy(player.x, player.y, 520);
+      if (!t) return false;
+      const flares = lvl >= 3 ? 2 : 1;
+      for (let i = 0; i < flares; i++) {
+        const z = alloc(zones);
+        if (!z) break;
+        z.x = t.x + (i ? (Math.random() - 0.5) * 140 : 0);
+        z.y = t.y + (i ? (Math.random() - 0.5) * 140 : 0);
+        z.r = (lvl >= 2 ? 92 : 72) * (lvl >= 4 ? 1.2 : 1);
+        z.t = z.max = lvl >= 4 ? 4.2 : 3.0;
+        z.dps = (lvl >= 4 ? 26 : 16) * dmgMul();
+        z.tick = 0;
+      }
+      flash = Math.max(flash, 0.12);
+      sfx.flaregun();
+      return true;
+    },
+  },
+  bayonet: {
+    name: 'Bayonet', desc: 'A sweeping close-quarters arc',
+    lvlDesc: ['', 'Wider sweep', 'Knocks enemies back', 'Full-circle whirl'],
+    cd: 1.0,
+    fire(lvl) {
+      const t = nearestEnemy(player.x, player.y, 140);
+      if (!t) return false;
+      const dx = t.x - player.x, dy = t.y - player.y;
+      const aim = Math.atan2(dy, dx);
+      const arc = lvl >= 4 ? Math.PI * 2 : lvl >= 2 ? 2.4 : 1.6;
+      const reach = 92 + lvl * 8;
+      let hit = 0;
+      eachEnemyNear(player.x, player.y, reach + 30, e => {
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if (d > reach + e.r) return;
+        let da = Math.atan2(e.y - player.y, e.x - player.x) - aim;
+        while (da > Math.PI) da -= 6.283;
+        while (da < -Math.PI) da += 6.283;
+        if (Math.abs(da) <= arc / 2) {
+          const kb = lvl >= 3 ? 260 : 60;
+          damageEnemy(e, (14 + lvl * 4) * dmgMul(), (e.x - player.x) / (d || 1) * kb, (e.y - player.y) / (d || 1) * kb);
+          hit++;
+        }
+      });
+      // visual sweep
+      sweeps.push({ a0: aim - arc / 2, a1: aim + arc / 2, r: reach, t: 0.18 });
+      if (sweeps.length > 6) sweeps.shift();
+      sfx.bayonet();
+      return hit >= 0;
+    },
+  },
 };
+const sweeps = [];
+
+function explode(x, y, radius, dmg) {
+  burst(x, y, 12, 'rgba(255,214,106,1)', 300);
+  shake = Math.max(shake, 4);
+  eachEnemyNear(x, y, radius + 30, e => {
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d < radius + e.r) damageEnemy(e, dmg, (e.x - x) / (d || 1) * 120, (e.y - y) / (d || 1) * 120);
+  });
+  sfx.boomHit();
+}
 
 function fireWeapons(dt) {
   for (const w of weapons) {
@@ -447,11 +559,81 @@ function gainXp(v) {
     onLevelUp();
   }
 }
-/* stage 2 replaces this with the upgrade choice */
+/* ---- the upgrade choice loop ---- */
+const PASSIVES = {
+  speed:  { name: 'Doubletime',    desc: '+8% move speed',        max: 4 },
+  rate:   { name: 'Rapid Drill',   desc: '+12% fire rate',        max: 4 },
+  magnet: { name: 'Scavenger Rig', desc: 'Wider salvage pull',    max: 4 },
+  maxhp:  { name: 'Iron Ration',   desc: '+20 max HP, heal 20',   max: 4 },
+};
+let rngOffer = null; // seeded per level in daily mode
+let pendingOffers = [];
+
+function rollOffers() {
+  const rng = rngOffer ? rngOffer(run.level) : Math.random;
+  const opts = [];
+  const ownedW = id => weapons.find(w => w.id === id);
+  for (const id of Object.keys(WEAPONS)) {
+    const w = ownedW(id);
+    if (w && w.lvl < 4) opts.push({ kind: 'weapon', id, lvl: w.lvl + 1 });
+    else if (!w && weapons.length < 3) opts.push({ kind: 'weapon', id, lvl: 1 });
+  }
+  for (const id of Object.keys(PASSIVES)) {
+    if (passives[id] < PASSIVES[id].max) opts.push({ kind: 'passive', id, lvl: passives[id] + 1 });
+  }
+  // deterministic shuffle with the offer rng
+  for (let i = opts.length - 1; i > 0; i--) {
+    const j = (rng() * (i + 1)) | 0;
+    [opts[i], opts[j]] = [opts[j], opts[i]];
+  }
+  return opts.slice(0, 3);
+}
+
 function onLevelUp() {
-  run.hp = Math.min(run.maxHp, run.hp + 10);
+  pendingOffers = rollOffers();
   popup(player.x, player.y - 24, 'LEVEL ' + run.level, '#ffd76a');
   sfx.levelup();
+  if (!pendingOffers.length) { run.hp = Math.min(run.maxHp, run.hp + 15); return; }
+  showUpgrade();
+}
+
+function showUpgrade() {
+  timeScale = 0.05; // brief slow-mo into the choice
+  const wrap = document.getElementById('cards');
+  wrap.innerHTML = '';
+  pendingOffers.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.className = 'card-btn' + (o.lvl === 1 && o.kind === 'weapon' ? ' new' : '');
+    const def = o.kind === 'weapon' ? WEAPONS[o.id] : PASSIVES[o.id];
+    const desc = o.kind === 'weapon' && o.lvl > 1 ? def.lvlDesc[o.lvl - 1] : def.desc;
+    b.innerHTML = '<span class="cname">' + def.name + '</span>' +
+      '<span class="cdesc">' + desc + '</span>' +
+      '<span class="pips">' + '&#9679;'.repeat(o.lvl) + '&#9675;'.repeat((o.kind === 'weapon' ? 4 : def.max) - o.lvl) + '</span>';
+    b.addEventListener('click', () => pickUpgrade(i));
+    wrap.appendChild(b);
+  });
+  setState('upgrade');
+}
+
+function pickUpgrade(i) {
+  const o = pendingOffers[i];
+  if (!o) return;
+  applyUpgrade(o);
+  pendingOffers = [];
+  setState('playing');
+  timeScale = 0.05; // eases back to 1 via the timeScale spring
+  sfx.pick();
+}
+
+function applyUpgrade(o) {
+  if (o.kind === 'weapon') {
+    const w = weapons.find(x => x.id === o.id);
+    if (w) w.lvl = o.lvl;
+    else weapons.push({ id: o.id, lvl: 1, cd: 0.3 });
+  } else {
+    passives[o.id] = o.lvl;
+    if (o.id === 'maxhp') { run.maxHp += 20; run.hp = Math.min(run.maxHp, run.hp + 20); }
+  }
 }
 
 /* ================================================================== */
@@ -553,7 +735,12 @@ function update(dt) {
     if (!p.alive) continue;
     p.life -= gdt;
     p.x += p.vx * gdt; p.y += p.vy * gdt;
-    if (p.life <= 0) { free(projs, p); continue; }
+    if (p.life <= 0) {
+      if (p.kind === 'shell') explode(p.x, p.y, p.pierce, p.dmg);
+      free(projs, p);
+      continue;
+    }
+    if (p.kind === 'shell') continue; // shells only burst on landing
     if (p.hostile) {
       if (Math.hypot(p.x - player.x, p.y - player.y) < p.r * S + player.r * S) {
         free(projs, p);
@@ -571,6 +758,25 @@ function update(dt) {
       }
     });
     if (consumed) free(projs, p);
+  }
+
+  /* --- burning zones --- */
+  for (const z of zones.items) {
+    if (!z.alive) continue;
+    z.t -= gdt; z.tick -= gdt;
+    if (z.t <= 0) { free(zones, z); continue; }
+    if (z.tick <= 0) {
+      z.tick = 0.4;
+      eachEnemyNear(z.x, z.y, z.r + 30, e => {
+        if (Math.hypot(e.x - z.x, e.y - z.y) < z.r + e.r) damageEnemy(e, z.dps * 0.4);
+      });
+      const p = alloc(parts);
+      if (p) {
+        p.x = z.x + (Math.random() - 0.5) * z.r * 1.4;
+        p.y = z.y + (Math.random() - 0.5) * z.r * 1.4;
+        p.vx = 0; p.vy = -40; p.t = p.max = 0.5; p.r = 4; p.color = 'rgba(255,180,90,1)';
+      }
+    }
   }
 
   /* --- gems / pickups --- */
@@ -605,7 +811,8 @@ function resetRun() {
   run.timeToFirstKill = null;
   player.x = player.y = player.vx = player.vy = 0;
   camera.x = camera.y = 0;
-  for (const pool of [enemies, projs, parts, gems, pops]) {
+  sweeps.length = 0;
+  for (const pool of [enemies, projs, parts, gems, pops, zones]) {
     for (const it of pool.items) it.alive = false;
     pool.count = 0;
   }
@@ -639,6 +846,7 @@ function fmtTime(t) { return ((t / 60) | 0) + ':' + String((t % 60) | 0).padStar
 
 function setState(s) {
   state = s;
+  document.getElementById('upgrade').classList.toggle('hidden', s !== 'upgrade');
   document.getElementById('menu').classList.toggle('hidden', s !== 'menu');
   document.getElementById('gameover').classList.toggle('hidden', s !== 'gameover');
   document.getElementById('paused').classList.toggle('hidden', s !== 'paused');
@@ -693,6 +901,30 @@ function draw() {
   }
 
   if (state === 'menu') { drawMenuBg(); return; }
+
+  /* burning zones */
+  for (const z of zones.items) {
+    if (!z.alive || !onScreen(z.x, z.y, z.r + 40)) continue;
+    const [sx, sy] = worldToScreen(z.x, z.y);
+    const a = 0.16 + 0.08 * Math.sin(anim * 9 + z.x);
+    ctx.fillStyle = 'rgba(255,150,60,' + a + ')';
+    ctx.beginPath(); ctx.arc(sx, sy, z.r, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,200,120,' + (a + 0.12) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, z.r * (0.9 + 0.1 * Math.sin(anim * 5)), 0, 7); ctx.stroke();
+  }
+  /* bayonet sweeps */
+  for (let i = sweeps.length - 1; i >= 0; i--) {
+    const sw = sweeps[i];
+    sw.t -= 0.016;
+    if (sw.t <= 0) { sweeps.splice(i, 1); continue; }
+    const [sx, sy] = worldToScreen(player.x, player.y);
+    ctx.fillStyle = 'rgba(255,233,184,' + sw.t * 2.2 + ')';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.arc(sx, sy, sw.r * S, sw.a0, sw.a1);
+    ctx.closePath(); ctx.fill();
+  }
 
   /* gems + medkits */
   for (const g of gems.items) {
@@ -766,6 +998,12 @@ function draw() {
     if (p.hostile) {
       drawGlow('rgba(255,106,64,1)', sx, sy, p.r * S * 3);
       ctx.fillStyle = '#ffb89a';
+    } else if (p.kind === 'shell') {
+      const arc = Math.sin(Math.min(1, 1 - p.life / 1.4) * Math.PI) * 16;
+      drawGlow('rgba(255,180,90,1)', sx, sy - arc, p.r * S * 2.6);
+      ctx.fillStyle = '#ffd76a';
+      ctx.beginPath(); ctx.arc(sx, sy - arc, p.r * S * 0.9, 0, 7); ctx.fill();
+      continue;
     } else {
       drawGlow('rgba(255,233,184,1)', sx, sy, p.r * S * 2.4);
       ctx.fillStyle = '#fff6d8';
@@ -899,6 +1137,11 @@ const sfx = {
   hurt()      { tone(260, 70, 0.2, 'sawtooth', 0.13); },
   levelup()   { tone(660, 990, 0.12, 'triangle', 0.1); tone(990, 1480, 0.16, 'triangle', 0.1, 0.12); },
   deploy()    { tone(440, 880, 0.22, 'triangle', 0.09); },
+  mortar()    { tone(140, 60, 0.25, 'square', 0.09); },
+  boomHit()   { boom(0.16, 0.3); },
+  flaregun()  { tone(300, 1600, 0.35, 'sawtooth', 0.08); },
+  bayonet()   { tone(700, 240, 0.09, 'sawtooth', 0.07); },
+  pick()      { tone(880, 1320, 0.1, 'triangle', 0.1); },
   death()     { boom(0.3, 0.8); tone(400, 42, 1.0, 'sawtooth', 0.13); },
 };
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
@@ -969,6 +1212,12 @@ window.__lastflare = {
   frameTimes: () => frameLog.slice(),
   enemyList: () => enemies.items.filter(e => e.alive).map(e => ({ x: e.x, y: e.y, type: e.type, hp: e.hp })),
   gemList: () => gems.items.filter(g => g.alive).map(g => ({ x: g.x, y: g.y, v: g.v })),
+  offers: () => pendingOffers.map(o => o.kind + ':' + o.id + ':' + o.lvl),
+  pick: i => pickUpgrade(i),
+  zonesCount: () => zones.count,
+  give: (id) => applyUpgrade(weapons.find(w => w.id === id)
+    ? { kind: 'weapon', id, lvl: Math.min(4, weapons.find(w => w.id === id).lvl + 1) }
+    : { kind: 'weapon', id, lvl: 1 }),
 };
 
 setState('menu');
