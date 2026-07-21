@@ -999,6 +999,7 @@ function unlockAudio() {
     try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
   }
   if (actx && actx.state === 'suspended') actx.resume();
+  musicInit();
 }
 function tone(f0, f1, dur, type, vol, delay) {
   if (muted || !actx || actx.state !== 'running') return;
@@ -1031,6 +1032,64 @@ const sfx = {
   clear()   { tone(840, 1350, 0.2, 'sine', 0.1); tone(1350, 780, 0.3, 'sine', 0.1, 0.24); },
   ready()   { tone(620, 990, 0.14, 'sine', 0.08); },
 };
+
+/* ---- dynamic music (ported from LAST FLARE): three continuous synth
+   layers crossfaded by game state — low march, hunters-near tension,
+   flare-reversal triumph. No scheduling, no samples. ---- */
+const music = { layers: null, gains: { march: 0, tension: 0, triumph: 0 }, mode: 'march' };
+function musicInit() {
+  if (music.layers || !actx) return;
+  try {
+    const master = actx.createGain(); master.gain.value = 0.14; master.connect(actx.destination);
+    const layer = () => { const g = actx.createGain(); g.gain.value = 0; g.connect(master); return g; };
+    const osc = (type, freq, dest) => {
+      const o = actx.createOscillator(); o.type = type; o.frequency.value = freq;
+      o.connect(dest); o.start(); return o;
+    };
+    const pulse = (dest, rate, depth) => { // voice gain pulsed by a square LFO
+      const vg = actx.createGain(); vg.gain.value = 1 - depth; vg.connect(dest);
+      const lfo = actx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = rate;
+      const lg = actx.createGain(); lg.gain.value = depth;
+      lfo.connect(lg); lg.connect(vg.gain); lfo.start();
+      return vg;
+    };
+    const march = layer();              // low left-right-left march (C2 + G2)
+    const mv = pulse(march, 1.8, 0.55);
+    osc('triangle', 65.41, mv); osc('triangle', 98, mv);
+    const tension = layer();            // hunters near: filtered minor-second grind
+    const tf = actx.createBiquadFilter(); tf.type = 'lowpass'; tf.frequency.value = 500;
+    tf.connect(pulse(tension, 3.2, 0.8));
+    osc('sawtooth', 110, tf); osc('sawtooth', 116.54, tf);
+    const triumph = layer();            // flare up: bright major-third fanfare pulse
+    const uv = pulse(triumph, 4.2, 0.7);
+    osc('triangle', 261.63, uv); osc('triangle', 329.63, uv);
+    music.layers = { march, tension, triumph };
+  } catch (e) {}
+}
+function musicTick(dt) {
+  if (!music.layers) return;
+  let tm = 0, tt = 0, tu = 0;
+  if (state === 'playing' && !muted) {
+    let near = false;
+    for (const g of ghosts) {
+      if (g.state !== 'active' || g.fright) continue;
+      if (Math.abs(g.x - pac.x) + Math.abs(g.y - pac.y) < 6) { near = true; break; }
+    }
+    music.mode = frightTimer > 0 ? 'triumph' : near ? 'tension' : 'march';
+    tm = music.mode === 'march' ? 1 : 0.25;
+    tt = music.mode === 'tension' ? 1 : 0;
+    tu = music.mode === 'triumph' ? 1 : 0;
+  }
+  const ease = Math.min(1, dt * 1.8);
+  music.gains.march += (tm - music.gains.march) * ease;
+  music.gains.tension += (tt - music.gains.tension) * ease;
+  music.gains.triumph += (tu - music.gains.triumph) * ease;
+  try {
+    music.layers.march.gain.value = music.gains.march * 0.5;
+    music.layers.tension.gain.value = music.gains.tension * 0.45;
+    music.layers.triumph.gain.value = music.gains.triumph * 0.5;
+  } catch (e) {}
+}
 
 /* ------------------------------------------------------------------ */
 /*  Input                                                             */
@@ -1149,6 +1208,7 @@ function frame(ts) {
   const dt = Math.min((ts - last) / 1000, 0.05);
   last = ts;
   if (state !== 'paused') update(dt);
+  musicTick(dt);
   tickHud();
   draw();
   requestAnimationFrame(frame);
@@ -1179,6 +1239,7 @@ window.__trenchfox = {
     left.sort((a, b) => a.d - b.d);
     for (const t of left.slice(n)) { grid[t.r][t.c] = null; dots--; }
   },
+  music: () => ({ ready: !!music.layers, mode: music.mode, gains: { ...music.gains } }),
   snapshot: () => ({
     state, score, high, lives, level, dots, dotsEaten, frightTimer,
     mazeIndex: (level - 1) % MAZES.length,

@@ -110,6 +110,7 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
       const p = s.player;
       if (s.novaT > 0) {
         window.__starshellFired = true;
+        window.__musicAtNova = window.__starshell.music().mode;
         const prey = window.__starshell.shadePos().filter(x => x.fright && !x.warn);
         if (!prey.length) return;
         prey.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
@@ -144,6 +145,12 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
   await page.waitForTimeout(6500);
   snap = await page.evaluate(() => window.__starshell.snap());
   assert(snap.bestChain >= 1, 'chain-ate at least one shade during the nova');
+  const musNova = await page.evaluate(() => ({
+    atNova: window.__musicAtNova,
+    now: window.__starshell.music(),
+  }));
+  assert(musNova.now.ready, 'music layers initialised');
+  assert(musNova.atNova === 'release', 'shell burst escalates music to release (' + musNova.atNova + ')');
   await page.evaluate(() => clearInterval(window.__steer));
 
   // Pause via visibility is environment-dependent; test death -> retry

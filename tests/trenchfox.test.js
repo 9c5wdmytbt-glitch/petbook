@@ -105,6 +105,12 @@ function checkMaze(rows, label) {
   assert(snap.frightTimer > 0, 'flare starts the exposure window');
   const active = snap.ghosts.filter(g => g.state === 'active');
   assert(active.length > 0 && active.every(g => g.fright), 'active hunters exposed by the flare');
+
+  // dynamic music: layers live after the audio unlock; the flare reversal
+  // must escalate the mode to triumph while the exposure window runs
+  const mus = await page.evaluate(() => window.__trenchfox.music());
+  assert(mus.ready, 'music layers initialised');
+  assert(mus.mode === 'triumph', 'flare reversal escalates music to triumph (' + mus.mode + ')');
   await page.waitForTimeout(2500);
 
   // Death: 0.5s freeze then sequence, ~2.6s total, hunters immobile

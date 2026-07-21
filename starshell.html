@@ -891,7 +891,76 @@ function unlockAudio() {
     } catch (e) {}
   }
   if (actx && actx.state === 'suspended') actx.resume();
+  musicInit();
 }
+
+/* ---- dynamic music (ported from LAST FLARE): continuous synth layers
+   crossfaded by game state — calm night, swarm pressure, shell-burst
+   release, plus a heartbeat layer when death is one touch away. ---- */
+const music = { layers: null, gains: { calm: 0, pressure: 0, release: 0, heart: 0 }, mode: 'calm' };
+function musicInit() {
+  if (music.layers || !actx) return;
+  try {
+    const master = actx.createGain(); master.gain.value = 0.15; master.connect(actx.destination);
+    const layer = () => { const g = actx.createGain(); g.gain.value = 0; g.connect(master); return g; };
+    const osc = (type, freq, dest) => {
+      const o = actx.createOscillator(); o.type = type; o.frequency.value = freq;
+      o.connect(dest); o.start(); return o;
+    };
+    const pulse = (dest, rate, depth) => { // voice gain pulsed by a square LFO
+      const vg = actx.createGain(); vg.gain.value = 1 - depth; vg.connect(dest);
+      const lfo = actx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = rate;
+      const lg = actx.createGain(); lg.gain.value = depth;
+      lfo.connect(lg); lg.connect(vg.gain); lfo.start();
+      return vg;
+    };
+    const calm = layer();               // airy night drone (A2 + E3, slow breath)
+    const cv = pulse(calm, 0.11, 0.3);
+    osc('sine', 110, cv); osc('sine', 164.81, cv);
+    const pressure = layer();           // swarm closing in: filtered pulsing saw
+    const pf = actx.createBiquadFilter(); pf.type = 'lowpass'; pf.frequency.value = 460;
+    pf.connect(pulse(pressure, 2.6, 0.85));
+    osc('sawtooth', 138.59, pf);
+    const release = layer();            // the field is lit: bright open fifth
+    const rv = pulse(release, 3.4, 0.6);
+    osc('triangle', 440, rv); osc('triangle', 659.25, rv);
+    const heart = layer();              // one touch from death: low double thump
+    const hv = pulse(heart, 1.15, 0.92);
+    osc('sine', 55, hv);
+    music.layers = { calm, pressure, release, heart };
+  } catch (e) {}
+}
+function musicTick(dt) {
+  if (!music.layers) return;
+  let tc = 0, tp = 0, tr = 0, th = 0;
+  if (state === 'playing' && !muted) {
+    const density = Math.min(1, shades.length / 14 + wavePressure * 0.4);
+    music.mode = novaT > 0 ? 'release' : density > 0.5 ? 'pressure' : 'calm';
+    tc = music.mode === 'calm' ? 1 : 0.25;
+    tp = music.mode === 'pressure' ? 1 : 0;
+    tr = music.mode === 'release' ? 1 : 0;
+    if (novaT <= 0 && player) { // heartbeat: a hostile is nearly touching us
+      for (const sh of shades) {
+        if (sh.fright > 0 || sh.warn > 0) continue;
+        const d = Math.hypot(sh.x - player.x, sh.y - player.y);
+        const rr = sh.hState === 'lunge' ? 150 * S : 80 * S;
+        if (d < rr) { th = 1; break; }
+      }
+    }
+  }
+  const ease = Math.min(1, dt * 1.8);
+  music.gains.calm += (tc - music.gains.calm) * ease;
+  music.gains.pressure += (tp - music.gains.pressure) * ease;
+  music.gains.release += (tr - music.gains.release) * ease;
+  music.gains.heart += (th - music.gains.heart) * Math.min(1, dt * 3);
+  try {
+    music.layers.calm.gain.value = music.gains.calm * 0.45;
+    music.layers.pressure.gain.value = music.gains.pressure * 0.4;
+    music.layers.release.gain.value = music.gains.release * 0.4;
+    music.layers.heart.gain.value = music.gains.heart * 0.8;
+  } catch (e) {}
+}
+
 function tone(f0, f1, dur, type, vol, delay) {
   if (muted || !actx || actx.state !== 'running') return;
   try {
@@ -1049,6 +1118,7 @@ function frame(ts) {
   const dt = Math.min((ts - last) / 1000, 0.04);
   last = ts;
   if (state !== 'paused') update(dt);
+  musicTick(dt);
   tickNovaBtn();
   draw();
   requestAnimationFrame(frame);
@@ -1070,6 +1140,7 @@ window.__starshell = {
   charge: () => { meter = 1; },
   boom: fireNova,
   kill: die,
+  music: () => ({ ready: !!music.layers, mode: music.mode, gains: { ...music.gains } }),
 };
 
 setState('menu');
