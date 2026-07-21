@@ -167,13 +167,16 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
   }));
   assert(/^RANK [A-Z ]+ · \+\d+ XP$/.test(rankInfo.line), 'game over shows rank + XP gained (' + rankInfo.line + ')');
   assert(rankInfo.xp > 0, 'arcade-xp banked (' + rankInfo.xp + ')');
+  const rt0 = Date.now();
   await page.tap('#btnRetry');
-  for (let i = 0; i < 15 && st !== 'playing'; i++) {
-    await page.waitForTimeout(200);
+  for (let i = 0; i < 40 && st !== 'playing'; i++) {
+    await page.waitForTimeout(80);
     st = (await page.evaluate(() => window.__starshell.snap())).state;
   }
+  const rMs = Date.now() - rt0;
   snap = await page.evaluate(() => window.__starshell.snap());
   assert(snap.state === 'playing' && snap.score < 100, 'retry restarts clean (' + snap.state + '/' + snap.score + ')');
+  assert(rMs < 1500, 'one-tap retry reaches gameplay in <1.5s (' + rMs + 'ms)');
 
   // juice: hold still until a hostile closes in — the shared danger signal
   // (heartbeat layer + near-death vignette) must rise before contact

@@ -314,5 +314,16 @@ function checkMaze(rows, label) {
   assert(/[✔◦]/.test(over.msg), 'mission sheet listed on game over');
   assert(over.xp > xpBefore, 'arcade-xp banked (' + xpBefore + ' -> ' + over.xp + ')');
 
+  // time-to-action: one tap from game over back to live gameplay, fast
+  const rt0 = Date.now();
+  await page.tap('#stage');
+  let rst = '';
+  while (rst !== 'playing' && Date.now() - rt0 < 5000) {
+    await page.waitForTimeout(80);
+    rst = await page.evaluate(() => window.__trenchfox.snapshot().state);
+  }
+  const rMs = Date.now() - rt0;
+  assert(rst === 'playing' && rMs < 2500, 'one-tap retry reaches gameplay in <2.5s (' + rMs + 'ms)');
+
   await finish(browser, errors, 'trenchfox.test');
 })().catch(e => { console.error('FAIL trenchfox.test:', e.message); process.exit(1); });

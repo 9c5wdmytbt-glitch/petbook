@@ -469,7 +469,8 @@ function newGame() {
   runRouts = 0; maxFlareChain = 0; runDots = 0; missionT = 0;
   rollMissions();
   buildLevel(); resetActors();
-  setState('ready', 2.0);
+  // 1.0s READY: one beat to orient, matching the arcade's instant-retry standard
+  setState('ready', 1.0);
   sfx.ready();
 }
 
@@ -639,7 +640,7 @@ function update(dt) {
     if (stateTimer <= 0) {
       level++;
       buildLevel(); resetActors();
-      setState('ready', 2.0); updateHud();
+      setState('ready', 1.2); updateHud();
     }
     return;
   }
