@@ -197,6 +197,52 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
   }
   assert(dangerSeen > 0.15, 'danger signal rises as a hostile closes (' + dangerSeen.toFixed(2) + ')');
 
+  // Session missions: three distinct, rotating on the daily seed
+  const mi = await page.evaluate(() => {
+    const ss = window.__starshell;
+    const sheet = d => { ss.rollMissionsWith(d); return ss.missions().map(m => m.id + ':' + m.n).join(','); };
+    return { a1: sheet('2026-01-01'), a2: sheet('2026-01-01'), b: sheet('2026-01-02'),
+             count: ss.missions().length, ids: ss.missions().map(m => m.id) };
+  });
+  assert(mi.count === 3 && new Set(mi.ids).size === 3, 'three distinct missions rolled');
+  assert(mi.a1 === mi.a2, 'same seed date gives the same mission sheet');
+  assert(mi.a1 !== mi.b, 'a different date rotates the sheet');
+
+  // Completion pays arcade XP: find a sheet with a low shell-count mission,
+  // then fire that many star shells for real
+  const pay = await page.evaluate(() => new Promise(resolve => {
+    const ss = window.__starshell;
+    let targetDate = null, need = 0;
+    for (let i = 1; i <= 31 && !targetDate; i++) {
+      const d = '2026-03-' + String(i).padStart(2, '0');
+      ss.rollMissionsWith(d);
+      const m = ss.missions().find(x => x.id === 'shells' && x.n <= 3);
+      if (m) { targetDate = d; need = m.n; }
+    }
+    if (!targetDate) { resolve({ ok: false, why: 'no shells sheet in 31 days' }); return; }
+    const xp0 = JSON.parse(localStorage.getItem('arcade-xp')) || 0;
+    let tries = 0;
+    const iv = setInterval(() => {
+      const s = ss.snap();
+      if (s.state === 'gameover') { // died: restart and re-arm the sheet
+        document.getElementById('btnRetry').click();
+        setTimeout(() => ss.rollMissionsWith(targetDate), 300);
+        return;
+      }
+      if (s.state !== 'playing') return;
+      if (s.novaT <= 0) { ss.charge(); ss.boom(); }
+      const m = ss.missions().find(x => x.id === 'shells');
+      if (m && m.done) {
+        clearInterval(iv);
+        resolve({ ok: true, xp0, xp1: JSON.parse(localStorage.getItem('arcade-xp')) || 0, need });
+        return;
+      }
+      if (++tries > 150) { clearInterval(iv); resolve({ ok: false, why: 'timeout', missions: ss.missions() }); }
+    }, 250);
+  }));
+  assert(pay.ok, 'star-shell mission completes (' + JSON.stringify(pay) + ')');
+  assert(pay.xp1 > pay.xp0, 'mission completion pays arcade XP (' + pay.xp0 + ' -> ' + pay.xp1 + ')');
+
   // Daily mode + storage hygiene
   await page.evaluate(() => window.__starshell.kill());
   for (let i = 0; i < 25; i++) {

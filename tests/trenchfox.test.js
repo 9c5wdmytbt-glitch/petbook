@@ -125,6 +125,47 @@ function checkMaze(rows, label) {
   } else {
     console.log('note: only one hunter active at flare time — callout needs a chain of 2');
   }
+  // Session missions: three distinct, rotating on the daily seed
+  const mi = await page.evaluate(() => {
+    const tf = window.__trenchfox;
+    const sheet = d => { tf.rollMissionsWith(d); return tf.missions().map(m => m.id + ':' + m.n).join(','); };
+    return { a1: sheet('2026-01-01'), a2: sheet('2026-01-01'), b: sheet('2026-01-02'),
+             count: tf.missions().length, ids: tf.missions().map(m => m.id) };
+  });
+  assert(mi.count === 3 && new Set(mi.ids).size === 3, 'three distinct missions rolled');
+  assert(mi.a1 === mi.a2, 'same seed date gives the same mission sheet');
+  assert(mi.a1 !== mi.b, 'a different date rotates the sheet');
+
+  // Mission completion pays arcade XP: find a sheet with a rout mission we
+  // can drive, then run hunters down until it completes
+  const pay = await page.evaluate(() => new Promise(resolve => {
+    const tf = window.__trenchfox;
+    let target = null;
+    for (let i = 1; i <= 31 && !target; i++) {
+      const d = '2026-03-' + String(i).padStart(2, '0');
+      tf.rollMissionsWith(d);
+      const m = tf.missions().find(x => x.id === 'routs' && x.n <= 6);
+      if (m) target = { d, n: m.n };
+    }
+    if (!target) { resolve({ ok: false, why: 'no drivable sheet in 31 days' }); return; }
+    const xp0 = JSON.parse(localStorage.getItem('arcade-xp')) || 0;
+    let tries = 0;
+    const iv = setInterval(() => {
+      const s = tf.snapshot();
+      if (s.state !== 'playing') return;
+      if (s.frightTimer <= 0.5) tf.flare();
+      tf.routNearest();
+      const m = tf.missions().find(x => x.id === 'routs');
+      if (m && m.done) {
+        clearInterval(iv);
+        resolve({ ok: true, xp0, xp1: JSON.parse(localStorage.getItem('arcade-xp')) || 0, target });
+        return;
+      }
+      if (++tries > 250) { clearInterval(iv); resolve({ ok: false, why: 'timeout', missions: tf.missions() }); }
+    }, 120);
+  }));
+  assert(pay.ok, 'rout mission completes (' + JSON.stringify(pay) + ')');
+  assert(pay.xp1 > pay.xp0, 'mission completion pays arcade XP (' + pay.xp0 + ' -> ' + pay.xp1 + ')');
   await page.waitForTimeout(2500);
 
   // Death: 0.5s freeze then sequence, ~2.6s total, hunters immobile
@@ -270,6 +311,7 @@ function checkMaze(rows, label) {
   assert(over.sawVig > 0.2, 'near-death vignette engages on the final life (' + over.sawVig.toFixed(2) + ')');
   assert(/RANK [A-Z ]+/.test(over.msg) && /\+\d+ XP/.test(over.msg),
     'game over shows rank + XP gained');
+  assert(/[✔◦]/.test(over.msg), 'mission sheet listed on game over');
   assert(over.xp > xpBefore, 'arcade-xp banked (' + xpBefore + ' -> ' + over.xp + ')');
 
   await finish(browser, errors, 'trenchfox.test');

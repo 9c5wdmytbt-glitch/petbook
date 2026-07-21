@@ -267,6 +267,7 @@ let fruitTimer = 0;
 let popups = [];
 let muted = false;
 let vig = 0; // near-death vignette intensity (final life)
+let missionT = 0;
 
 const SCHEDULE = [
   [7, 'scatter'], [20, 'chase'], [7, 'scatter'], [20, 'chase'],
@@ -465,6 +466,8 @@ function setState(s, t) {
 
 function newGame() {
   score = 0; lives = 3; level = 1; extraLifeGiven = false;
+  runRouts = 0; maxFlareChain = 0; runDots = 0; missionT = 0;
+  rollMissions();
   buildLevel(); resetActors();
   setState('ready', 2.0);
   sfx.ready();
@@ -487,7 +490,7 @@ function addScore(n) {
 }
 
 function eatPellet(ch) {
-  dotsEaten++; dots--;
+  dotsEaten++; dots--; runDots++;
   if (ch === 'o') {
     addScore(50);
     igniteFlare();
@@ -513,6 +516,8 @@ function igniteFlare() {
 function eatGhost(g) {
   const pts = 200 << Math.min(ghostChain, 3);
   ghostChain++;
+  runRouts++;
+  maxFlareChain = Math.max(maxFlareChain, ghostChain);
   addScore(pts);
   g.state = 'eyes'; g.fright = false;
   popups.push({ x: g.x, y: g.y, text: String(pts), t: 1.0, color: '#4dd6ff' });
@@ -530,6 +535,62 @@ let deathFxDone = false;
 function killPac() {
   setState('dying', 2.6); // 0.5s frozen silence, then the death sequence
   deathFxDone = false;
+}
+
+/* ---- session missions (ported from LAST FLARE): three per run, themed
+   for the trenches, rotating on the daily seed, paying arcade XP ---- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashStr(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+let runRouts = 0, maxFlareChain = 0, runDots = 0; // per-run mission counters
+const MISSION_POOL = [
+  { id: 'routs',    name: 'Rout {n} hunters',        ns: [3, 6, 10],         check: () => runRouts,      bonus: 25 },
+  { id: 'oneflare', name: 'Rout {n} with one flare', ns: [2, 3, 4],          check: () => maxFlareChain, bonus: 35 },
+  { id: 'dots',     name: 'Grab {n} dispatches',     ns: [80, 150, 220],     check: () => runDots,       bonus: 25 },
+  { id: 'sector',   name: 'Reach sector {n}',        ns: [2, 3],             check: () => level,         bonus: 40 },
+  { id: 'score',    name: 'Score {n}',               ns: [1500, 3000, 6000], check: () => score,         bonus: 30 },
+];
+let missions = [];
+function rollMissions(dateStr) {
+  const rng = mulberry32(hashStr('trenchfox-missions-' + (dateStr || todayKey())));
+  const idx = [0, 1, 2, 3, 4];
+  missions = [];
+  for (let i = 0; i < 3; i++) {
+    const m = MISSION_POOL[idx.splice((rng() * idx.length) | 0, 1)[0]];
+    const n = m.ns[(rng() * m.ns.length) | 0];
+    missions.push({ id: m.id, n, check: m.check, bonus: m.bonus, done: false,
+                    name: m.name.replace('{n}', n) });
+  }
+}
+function tickMissions() {
+  for (const m of missions) {
+    if (!m.done && m.check() >= m.n) {
+      m.done = true;
+      arcade.add(m.bonus);
+      popups.push({ x: pac.x, y: pac.y - 1.4, text: 'MISSION ✓ +' + m.bonus + ' XP', t: 1.4, color: '#7dff9a' });
+      sfx.life();
+    }
+  }
+}
+function missionHtml() {
+  return missions.map(m =>
+    '<span style="color:' + (m.done ? '#7dff9a' : '#8a8fb8') + '">' +
+    (m.done ? '✔ ' : '◦ ') + m.name + ' (+' + m.bonus + ' XP)</span>'
+  ).join('<br>');
 }
 
 let lastXpGain = 0;
@@ -587,6 +648,8 @@ function update(dt) {
   if (freeze > 0) { freeze -= dt; if (freeze > 0) return; }
 
   levelTime += dt;
+  missionT += dt;
+  if (missionT >= 1) { missionT = 0; tickMissions(); }
 
   // scatter/chase schedule (paused while frightened)
   if (frightTimer > 0) {
@@ -995,7 +1058,7 @@ function updateOverlay() {
     ov.classList.remove('hidden');
   } else if (state === 'paused') {
     title.textContent = 'PAUSED';
-    msg.innerHTML = '<span class="pulse">Tap to resume</span>';
+    msg.innerHTML = '<span style="font-size:12px">' + missionHtml() + '</span><br><span class="pulse">Tap to resume</span>';
     ov.classList.remove('hidden');
   } else if (state === 'gameover') {
     title.textContent = 'CAUGHT';
@@ -1003,6 +1066,7 @@ function updateOverlay() {
     msg.innerHTML = 'Score: ' + score + (score >= high && score > 0 ? ' &mdash; new high score!' : '') +
       '<br><span id="ovRank" style="color:#ffd76a;letter-spacing:2px">RANK ' + arcade.rank().toUpperCase() +
       ' &middot; +' + lastXpGain + ' XP</span>' +
+      '<br><span style="font-size:12px">' + missionHtml() + '</span>' +
       '<br><br><span class="pulse" style="color:#ffd23f;letter-spacing:3px">TAP TO PLAY AGAIN</span>';
     ov.classList.remove('hidden');
   } else {
@@ -1263,6 +1327,8 @@ window.__trenchfox = {
     for (const t of left.slice(n)) { grid[t.r][t.c] = null; dots--; }
   },
   music: () => ({ ready: !!music.layers, mode: music.mode, gains: { ...music.gains } }),
+  missions: () => missions.map(m => ({ id: m.id, n: m.n, name: m.name, done: m.done, bonus: m.bonus })),
+  rollMissionsWith: d => rollMissions(d), // test-only: fixed-date sheet
   routNearest: () => { // test-only: run down the closest exposed hunter
     if (state !== 'playing') return false;
     const g = ghosts.find(x => x.fright && x.state === 'active');

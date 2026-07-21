@@ -145,6 +145,7 @@
     <span>Light collected</span><b id="stMotes">0</b>
     <span>Grazes</span><b id="stGraze">0</b>
   </div>
+  <div id="ssMissions" style="display:flex;flex-direction:column;gap:5px;font-size:12.5px"></div>
   <div class="btn-row" style="flex-direction:column">
     <button class="primary" id="btnRetry">RUN IT BACK</button>
     <div class="btn-row">
@@ -156,6 +157,7 @@
 
 <div class="panel hidden" id="paused">
   <div style="font-size:22px;letter-spacing:8px;color:#dfe3ff">PAUSED</div>
+  <div id="ssMissionsP" style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;margin:8px 0"></div>
   <div class="tagline pulse">Tap to resume</div>
 </div>
 
@@ -316,6 +318,8 @@ function newRun(m) {
   combo = 0; comboT = 0; motesEaten = 0; grazes = 0;
   grazeCombo = 0; lastGrazeT = 0; lastNovaClose = false;
   dangerT = 0;
+  shellsFired = 0; missionSec = 0;
+  rollMissions();
   spawnT = 1.2; shake = 0; flash = 0; timeScale = 1;
   wave = 1; waveT = 0; waveLull = false; wavePressure = 0; wavePulse = 0;
   dbgSpawns.length = 0;
@@ -335,6 +339,7 @@ function setState(s) {
   document.getElementById('paused').classList.toggle('hidden', s !== 'paused');
   const nb = document.getElementById('novaBtn');
   nb.classList.toggle('shown', s === 'playing' || s === 'paused');
+  if (s === 'paused') document.getElementById('ssMissionsP').innerHTML = missionHtml();
   if (s === 'menu') updateMenuStats();
 }
 
@@ -431,6 +436,7 @@ function update(dt) {
   if (state !== 'playing') return;
 
   time += gdt;
+  if ((time | 0) !== missionSec) { missionSec = time | 0; tickMissions(); }
 
   /* --- player steering --- */
   const maxV = 320 * S;
@@ -668,6 +674,7 @@ function fireNova() {
   lastNovaClose = closeCall;
   const dur = closeCall ? 6 : 5;
   meter = 0; novaT = dur; chainIdx = closeCall ? 1 : 0;
+  shellsFired++;
   for (const s of shades) s.fright = dur;
   rings.push({ x: player.x, y: player.y, r: 10, vr: 1400 * S, t: 0.7, w: 5 });
   rings.push({ x: player.x, y: player.y, r: 10, vr: 900 * S, t: 0.9, w: 3 });
@@ -695,6 +702,47 @@ function die() {
   sfx.death();
 }
 
+/* ---- session missions (ported from LAST FLARE): three per run, themed
+   for the night sky, rotating on the daily seed, paying arcade XP ---- */
+let shellsFired = 0, missionSec = 0;
+const MISSION_POOL = [
+  { id: 'chain',  name: 'Reach a ×{n} chain',   ns: [3, 4, 5],     check: () => bestChain,  bonus: 35 },
+  { id: 'graze',  name: 'Graze {n} times',      ns: [6, 12, 20],   check: () => grazes,     bonus: 25 },
+  { id: 'motes',  name: 'Collect {n} light',    ns: [30, 60, 100], check: () => motesEaten, bonus: 25 },
+  { id: 'time',   name: 'Survive {n}',          ns: [45, 90, 150], check: () => time | 0,   bonus: 30, fmt: fmtTime },
+  { id: 'shells', name: 'Fire {n} star shells', ns: [2, 3, 5],     check: () => shellsFired, bonus: 30 },
+];
+let missions = [];
+function rollMissions(dateStr) {
+  const seed = [...('starshell-missions-' + (dateStr || todayKey()))]
+    .reduce((a, c) => a * 31 + c.charCodeAt(0) | 0, 7);
+  const rng = mulberry32(seed);
+  const idx = [0, 1, 2, 3, 4];
+  missions = [];
+  for (let i = 0; i < 3; i++) {
+    const m = MISSION_POOL[idx.splice((rng() * idx.length) | 0, 1)[0]];
+    const n = m.ns[(rng() * m.ns.length) | 0];
+    missions.push({ id: m.id, n, check: m.check, bonus: m.bonus, done: false,
+                    name: m.name.replace('{n}', m.fmt ? m.fmt(n) : n) });
+  }
+}
+function tickMissions() {
+  for (const m of missions) {
+    if (!m.done && m.check() >= m.n) {
+      m.done = true;
+      arcade.add(m.bonus);
+      pops.push({ x: player.x, y: player.y - 34 * S, text: 'MISSION ✓ +' + m.bonus + ' XP', t: 1.4, color: '#7dff9a' });
+      sfx.ready();
+    }
+  }
+}
+function missionHtml() {
+  return missions.map(m =>
+    '<div style="color:' + (m.done ? '#7dff9a' : '#8a8fb8') + '">' +
+    (m.done ? '✔ ' : '◦ ') + m.name + ' <span style="opacity:.7">+' + m.bonus + ' XP</span></div>'
+  ).join('');
+}
+
 function finishRun() {
   const isBest = score > best;
   if (isBest) { best = score; store.set('best', best); }
@@ -716,6 +764,7 @@ function finishRun() {
     }
   }
   arcade.add(xpGain);
+  document.getElementById('ssMissions').innerHTML = missionHtml();
   document.getElementById('runScore').textContent = score.toLocaleString();
   document.getElementById('runTag').textContent = tag;
   document.getElementById('runRank').textContent =
@@ -1162,6 +1211,8 @@ window.__starshell = {
   boom: fireNova,
   kill: die,
   music: () => ({ ready: !!music.layers, mode: music.mode, gains: { ...music.gains } }),
+  missions: () => missions.map(m => ({ id: m.id, n: m.n, name: m.name, done: m.done, bonus: m.bonus })),
+  rollMissionsWith: d => rollMissions(d), // test-only: fixed-date sheet
 };
 
 setState('menu');
