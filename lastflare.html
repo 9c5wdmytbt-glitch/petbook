@@ -413,8 +413,28 @@ const parts   = makePool(MAX_PARTS,  () => ({ x: 0, y: 0, vx: 0, vy: 0, t: 0, ma
 const gems    = makePool(MAX_GEMS,   () => ({ x: 0, y: 0, v: 1, t: 0 }));
 const pops    = makePool(MAX_POPS,   () => ({ x: 0, y: 0, t: 0, txt: '', color: '' }));
 
+/* graceful degradation ladder: on sustained frame drops halve particles
+   first, then cap live enemies harder; step back up only after a long
+   smooth stretch so the level doesn't flap */
+let perfLevel = 0; // 0 full · 1 half particles · 2 +enemy cap 140 · 3 quarter particles +cap 100
+let perfAcc = 0, perfN = 0, perfGood = 0;
+function partBudget()  { return perfLevel >= 3 ? MAX_PARTS >> 2 : perfLevel >= 1 ? MAX_PARTS >> 1 : MAX_PARTS; }
+function enemyBudget() { return perfLevel >= 3 ? 100 : perfLevel >= 2 ? 140 : MAX_ENEMIES; }
+function perfTick(ms) {
+  perfAcc += ms; perfN++;
+  if (perfN < 60) return;
+  const avg = perfAcc / perfN;
+  perfAcc = 0; perfN = 0;
+  if (avg > 22) { if (perfLevel < 3) perfLevel++; perfGood = 0; }
+  else if (avg < 18) { if (++perfGood >= 8 && perfLevel > 0) { perfLevel--; perfGood = 0; } }
+  else perfGood = 0;
+}
+
 function burst(x, y, n, color, speed) {
+  if (perfLevel >= 1) n = Math.ceil(n / (perfLevel >= 3 ? 4 : 2));
+  const budget = partBudget();
   for (let i = 0; i < n; i++) {
+    if (parts.count >= budget) return;
     const p = alloc(parts);
     if (!p) return;
     const a = Math.random() * 6.283, v = (0.3 + Math.random() * 0.7) * speed;
@@ -613,6 +633,7 @@ function pickType() {
   return 'rusher';
 }
 function spawnEnemy(type) {
+  if (enemies.count >= enemyBudget()) return null; // degraded cap under load
   const e = alloc(enemies);
   if (!e) return null;
   const spec = ENEMY_TYPES[type];
@@ -914,7 +935,7 @@ function update(dt) {
       eachEnemyNear(z.x, z.y, z.r + 30, e => {
         if (Math.hypot(e.x - z.x, e.y - z.y) < z.r + e.r) damageEnemy(e, z.dps * 0.4);
       });
-      const p = alloc(parts);
+      const p = parts.count < partBudget() ? alloc(parts) : null;
       if (p) {
         p.x = z.x + (Math.random() - 0.5) * z.r * 1.4;
         p.y = z.y + (Math.random() - 0.5) * z.r * 1.4;
@@ -1442,7 +1463,10 @@ let last = performance.now();
 const frameLog = []; // stage 5 perf audit
 function frame(ts) {
   const dt = Math.min((ts - last) / 1000, 0.05);
-  if (frameLog.length < 40000 && state === 'playing') frameLog.push(ts - last);
+  if (state === 'playing') {
+    if (frameLog.length < 40000) frameLog.push(ts - last);
+    perfTick(ts - last);
+  }
   last = ts;
   if (state !== 'paused') update(dt);
   tickHud();
@@ -1462,10 +1486,13 @@ window.__lastflare = {
     weapons: weapons.map(w => ({ id: w.id, lvl: w.lvl })),
   }),
   hurt: n => hurtPlayer(n || 25),
+  heal: n => { if (state === 'playing') run.hp = Math.min(run.maxHp, run.hp + (n || 50)); },
   spawn: (type, n) => { for (let i = 0; i < (n || 1); i++) spawnEnemy(type || 'rusher'); },
   gainXp: n => gainXp(n || 10),
   killAll: () => { for (const e of enemies.items) if (e.alive) killEnemy(e); },
   frameTimes: () => frameLog.slice(),
+  perf: () => ({ level: perfLevel, partBudget: partBudget(), enemyBudget: enemyBudget() }),
+  setPerf: n => { perfLevel = Math.max(0, Math.min(3, n | 0)); perfAcc = 0; perfN = 0; perfGood = 0; },
   enemyList: () => enemies.items.filter(e => e.alive).map(e => ({ x: e.x, y: e.y, type: e.type, hp: e.hp })),
   gemList: () => gems.items.filter(g => g.alive).map(g => ({ x: g.x, y: g.y, v: g.v })),
   offers: () => pendingOffers.map(o => o.kind + ':' + o.id + ':' + o.lvl),
