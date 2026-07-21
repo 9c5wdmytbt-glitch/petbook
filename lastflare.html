@@ -108,6 +108,24 @@
   .card-btn .cdesc { font-size: 12px; color: #9aa0c8; letter-spacing: .3px; }
   .card-btn .pips { font-size: 10px; letter-spacing: 2px; color: #ffd76a; }
   .card-btn.new .cname::after { content: ' · NEW'; color: #7dff9a; font-size: 11px; }
+  #opRow { display: flex; align-items: center; gap: 10px; }
+  #opCard {
+    width: 200px; padding: 12px 10px; border-radius: 14px;
+    border: 1px solid rgba(255,214,106,.3);
+    background: rgba(20,26,48,.6);
+  }
+  #opName { font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #ffe9b8; }
+  #opDesc { font-size: 11.5px; color: #9aa0c8; margin-top: 4px; min-height: 15px; }
+  #opLock { font-size: 11px; color: #ff8f6a; letter-spacing: 1px; margin-top: 5px; min-height: 13px; }
+  #opRow button { min-width: 0; width: 46px; padding: 10px 0; }
+  .perk-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 9px 12px; border-radius: 12px;
+    border: 1px solid rgba(140,150,255,.25); background: rgba(20,26,48,.5);
+  }
+  .perk-row .pn { font-size: 13px; font-weight: 800; color: #dfe3ff; letter-spacing: .5px; }
+  .perk-row .pd { font-size: 10.5px; color: #8a90b8; }
+  .perk-row button { min-width: 0; padding: 7px 12px; font-size: 12px; }
   .pulse { animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
 </style>
@@ -127,13 +145,33 @@
 
 <div class="panel" id="menu">
   <div class="title">LAST FLARE</div>
-  <div class="tagline">The line broke. You didn't.<br>
-    Hold the field alone &mdash; your weapons fire themselves; you just have to
-    keep moving. Salvage everything.</div>
+  <div class="tagline">The line broke. You didn't.</div>
+  <div id="opRow">
+    <button class="small" id="opPrev">&#9664;</button>
+    <div id="opCard">
+      <div id="opName">THE SCOUT</div>
+      <div id="opDesc">Fast but fragile</div>
+      <div id="opLock"></div>
+    </div>
+    <button class="small" id="opNext">&#9654;</button>
+  </div>
   <button class="primary" id="btnDeploy">DEPLOY</button>
+  <button class="small" id="btnBarracks">BARRACKS</button>
   <div class="stats-line" id="menuStats"></div>
   <div class="tagline" style="font-size:11px;color:#6a7090">
     DRAG to move &middot; weapons auto-fire &middot; grab salvage to level up</div>
+</div>
+
+<div class="panel hidden" id="barracks">
+  <div style="font-size:15px;letter-spacing:6px;color:#ffd76a">BARRACKS</div>
+  <div class="stats-line" id="bkRank"></div>
+  <div style="display:flex;gap:10px">
+    <button class="small" id="tabPerks">PERKS</button>
+    <button class="small" id="tabMedals">MEDALS</button>
+  </div>
+  <div id="perksWrap" style="display:flex;flex-direction:column;gap:9px;width:100%;max-width:340px"></div>
+  <canvas id="medalCv" width="340" height="300" style="display:none;max-width:88vw"></canvas>
+  <button class="small" id="btnBkBack">BACK</button>
 </div>
 
 <div class="panel hidden" id="gameover">
@@ -234,7 +272,76 @@ let muted = store.get('muted', (function () {
   } catch (e) { return false; }
 })());
 
-const meta = { perkLvl: () => 0 }; // stage 3 replaces with real perks
+/* ---- meta progression: operators, perks, medals, rank ---- */
+const OPERATORS = {
+  scout:  { name: 'The Scout',  desc: 'Fast but fragile',            hp: 70,  speedMul: 1.15, weapon: 'rifle',    cost: 0 },
+  gunner: { name: 'The Gunner', desc: 'Deploys with the mortar',     hp: 120, speedMul: 0.9,  weapon: 'mortar',   cost: 300 },
+  medic:  { name: 'The Medic',  desc: 'Slow, steady regeneration',   hp: 100, speedMul: 1.0,  weapon: 'flaregun', cost: 800, regen: 0.6 },
+  fox:    { name: 'The Fox',    desc: '+30% salvage. Old habits.',   hp: 90,  speedMul: 1.05, weapon: 'bayonet',  cost: 2000, salvageMul: 1.3 },
+};
+const OP_ORDER = ['scout', 'gunner', 'medic', 'fox'];
+const PERKS = {
+  hp:      { name: 'Conditioning', desc: '+5% max HP / rank',      max: 5 },
+  damage:  { name: 'Marksman',     desc: '+6% damage / rank',      max: 5 },
+  speed:   { name: 'Long March',   desc: '+4% move speed / rank',  max: 5 },
+  salvage: { name: 'Quartermaster',desc: '+5% salvage / rank',     max: 5 },
+};
+const MEDALS = [
+  { id: 'survive1',  name: 'First Hour',    desc: 'Survive 1:00' },
+  { id: 'survive3',  name: 'Dug In',        desc: 'Survive 3:00' },
+  { id: 'survive5',  name: 'Hold the Line', desc: 'Survive 5:00' },
+  { id: 'kills100',  name: 'Repelled',      desc: '100 kills in a run' },
+  { id: 'kills500',  name: 'No Man Passes', desc: '500 kills in a run' },
+  { id: 'level8',    name: 'Veteran',       desc: 'Reach level 8 in a run' },
+  { id: 'maxweapon', name: 'Gunsmith',      desc: 'Max out a weapon' },
+  { id: 'gems100',   name: 'Magpie',        desc: '100 salvage in a run' },
+  { id: 'allops',    name: 'Full Roster',   desc: 'Unlock every operator' },
+  { id: 'bank5000',  name: 'War Chest',     desc: 'Bank 5,000 salvage' },
+  { id: 'dailywin',  name: 'On Schedule',   desc: 'Win a Daily Operation' },
+  { id: 'streak3',   name: 'Regular',       desc: '3-day daily streak' },
+];
+const RANKS = [
+  ['Private', 0], ['Corporal', 300], ['Sergeant', 800], ['Lieutenant', 1600],
+  ['Captain', 3000], ['Major', 5000], ['Colonel', 8000], ['Field Marshal', 12000],
+];
+const meta = {
+  unlocked: store.get('operators', ['scout']),
+  operator: store.get('operator', 'scout'),
+  perks: store.get('perks', { hp: 0, damage: 0, speed: 0, salvage: 0 }),
+  medals: store.get('medals', {}),
+  xp: store.get('xp', 0), // lifetime salvage = account XP
+  perkLvl(id) { return this.perks[id] || 0; },
+  rank() {
+    let r = RANKS[0][0];
+    for (const [name, need] of RANKS) if (this.xp >= need) r = name;
+    return r;
+  },
+  save() {
+    store.set('operators', this.unlocked);
+    store.set('operator', this.operator);
+    store.set('perks', this.perks);
+    store.set('medals', this.medals);
+    store.set('xp', this.xp);
+  },
+};
+function awardMedal(id) {
+  if (meta.medals[id]) return;
+  meta.medals[id] = true;
+  meta.save();
+  const m = MEDALS.find(m => m.id === id);
+  popup(player.x, player.y - 40, '\u2726 ' + (m ? m.name : id), '#ffd76a');
+  sfx.medal();
+}
+function checkRunMedals() {
+  if (run.t >= 60) awardMedal('survive1');
+  if (run.t >= 180) awardMedal('survive3');
+  if (run.t >= 300) awardMedal('survive5');
+  if (run.kills >= 100) awardMedal('kills100');
+  if (run.kills >= 500) awardMedal('kills500');
+  if (run.level >= 8) awardMedal('level8');
+  if (weapons.some(w => w.lvl >= 4)) awardMedal('maxweapon');
+  if (run.salvage >= 100) awardMedal('gems100');
+}
 const run = {
   t: 0, kills: 0, salvage: 0, level: 1, xp: 0, xpNeed: 6,
   hp: 100, maxHp: 100, inv: 0,
@@ -551,7 +658,7 @@ function mergeGem() { // pool full: fold the oldest gem's value into a new one
 
 function gainXp(v) {
   run.xp += v;
-  run.salvage += v;
+  run.salvage += Math.round(v * (run.salvageMul || 1));
   while (run.xp >= run.xpNeed) {
     run.xp -= run.xpNeed;
     run.level++;
@@ -657,6 +764,8 @@ function update(dt) {
   const gdt = dt * timeScale;
   run.t += gdt;
   if (run.inv > 0) run.inv -= gdt;
+  if (run.regen) run.hp = Math.min(run.maxHp, run.hp + run.regen * gdt);
+  if ((run.t | 0) !== run._medalT) { run._medalT = run.t | 0; checkRunMedals(); }
 
   /* --- player steering (drag anywhere; the stick is the world) --- */
   let tvx = 0, tvy = 0;
@@ -805,8 +914,13 @@ function update(dt) {
 /*  Run lifecycle                                                     */
 /* ================================================================== */
 function resetRun() {
+  const op = OPERATORS[meta.operator] || OPERATORS.scout;
   run.t = 0; run.kills = 0; run.salvage = 0; run.level = 1; run.xp = 0; run.xpNeed = 6;
-  run.maxHp = 100; run.hp = run.maxHp; run.inv = 0;
+  run.maxHp = Math.round(op.hp * (1 + meta.perkLvl('hp') * 0.05));
+  run.hp = run.maxHp; run.inv = 0;
+  run.regen = op.regen || 0;
+  run.salvageMul = (op.salvageMul || 1) * (1 + meta.perkLvl('salvage') * 0.05);
+  player.speed = 215 * op.speedMul * (1 + meta.perkLvl('speed') * 0.04);
   run.wave = 1; run.waveT = 0; run.lull = false;
   run.timeToFirstKill = null;
   player.x = player.y = player.vx = player.vy = 0;
@@ -816,7 +930,7 @@ function resetRun() {
     for (const it of pool.items) it.alive = false;
     pool.count = 0;
   }
-  weapons = [{ id: 'rifle', lvl: 1, cd: 0.4 }];
+  weapons = [{ id: (OPERATORS[meta.operator] || OPERATORS.scout).weapon, lvl: 1, cd: 0.4 }];
   passives.speed = passives.rate = passives.magnet = passives.maxhp = 0;
   rngSpawn = Math.random;
   spawnT = 0.8;
@@ -835,6 +949,10 @@ function endRun() {
   const isBest = run.t > best;
   if (isBest) store.set('bestTime', run.t);
   store.set('salvageBank', store.get('salvageBank', 0) + run.salvage);
+  meta.xp += run.salvage;
+  checkRunMedals();
+  if (store.get('salvageBank', 0) >= 5000) awardMedal('bank5000');
+  meta.save();
   document.getElementById('overScore').textContent = fmtTime(run.t);
   document.getElementById('overTag').textContent = isBest ? 'LONGEST STAND' : '';
   document.getElementById('ovKills').textContent = run.kills;
@@ -855,8 +973,10 @@ function setState(s) {
   if (s === 'menu') {
     const bank = store.get('salvageBank', 0), best = store.get('bestTime', 0);
     document.getElementById('menuStats').innerHTML =
+      'RANK <b>' + meta.rank().toUpperCase() + '</b><br>' +
       (best > 0 ? 'LONGEST STAND <b>' + fmtTime(best) + '</b> &nbsp;&middot;&nbsp; ' : '') +
       'SALVAGE <b>' + bank.toLocaleString() + '</b>';
+    if (typeof refreshOp === 'function') refreshOp();
   }
 }
 
@@ -1142,6 +1262,9 @@ const sfx = {
   flaregun()  { tone(300, 1600, 0.35, 'sawtooth', 0.08); },
   bayonet()   { tone(700, 240, 0.09, 'sawtooth', 0.07); },
   pick()      { tone(880, 1320, 0.1, 'triangle', 0.1); },
+  medal()     { tone(1050, 1050, 0.09, 'triangle', 0.1); tone(1560, 1560, 0.18, 'triangle', 0.1, 0.1); },
+  unlock()    { tone(520, 1040, 0.2, 'triangle', 0.11); },
+  deny()      { tone(200, 150, 0.15, 'square', 0.08); },
   death()     { boom(0.3, 0.8); tone(400, 42, 1.0, 'sawtooth', 0.13); },
 };
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
@@ -1162,7 +1285,7 @@ function ptrUp(e) { if (e.pointerId === ptr.id) { ptr.down = false; ptr.id = nul
 stage.addEventListener('pointerup', ptrUp);
 stage.addEventListener('pointercancel', ptrUp);
 
-document.getElementById('btnDeploy').addEventListener('click', () => { unlockAudio(); startRun(); });
+document.getElementById('btnDeploy').addEventListener('click', () => { unlockAudio(); tryDeploy(); });
 document.getElementById('btnRetry').addEventListener('click', () => { unlockAudio(); startRun(); });
 document.getElementById('btnMenu').addEventListener('click', () => setState('menu'));
 document.getElementById('pauseBtn').addEventListener('click', e => {
@@ -1215,12 +1338,127 @@ window.__lastflare = {
   offers: () => pendingOffers.map(o => o.kind + ':' + o.id + ':' + o.lvl),
   pick: i => pickUpgrade(i),
   zonesCount: () => zones.count,
+  meta: () => ({ unlocked: meta.unlocked.slice(), operator: meta.operator, perks: { ...meta.perks },
+                 medals: Object.keys(meta.medals), xp: meta.xp, rank: meta.rank(),
+                 bank: store.get('salvageBank', 0) }),
+  bank: n => store.set('salvageBank', n),
   give: (id) => applyUpgrade(weapons.find(w => w.id === id)
     ? { kind: 'weapon', id, lvl: Math.min(4, weapons.find(w => w.id === id).lvl + 1) }
     : { kind: 'weapon', id, lvl: 1 }),
 };
 
+/* ---- barracks / operator select ---- */
+let opIdx = Math.max(0, OP_ORDER.indexOf(meta.operator));
+function refreshOp() {
+  const id = OP_ORDER[opIdx], op = OPERATORS[id];
+  const owned = meta.unlocked.includes(id);
+  document.getElementById('opName').textContent = op.name.toUpperCase();
+  document.getElementById('opDesc').textContent = op.desc + ' \u00b7 starts: ' + WEAPONS[op.weapon].name;
+  const bank = store.get('salvageBank', 0);
+  document.getElementById('opLock').innerHTML = owned ? '' :
+    'LOCKED \u00b7 ' + op.cost + ' salvage' + (bank >= op.cost ? ' \u2014 TAP DEPLOY TO UNLOCK' : '');
+  document.getElementById('btnDeploy').textContent = owned ? 'DEPLOY' : (bank >= op.cost ? 'UNLOCK + DEPLOY' : 'DEPLOY LOCKED');
+}
+document.getElementById('opPrev').addEventListener('click', () => { opIdx = (opIdx + OP_ORDER.length - 1) % OP_ORDER.length; refreshOp(); });
+document.getElementById('opNext').addEventListener('click', () => { opIdx = (opIdx + 1) % OP_ORDER.length; refreshOp(); });
+
+function tryDeploy() {
+  const id = OP_ORDER[opIdx], op = OPERATORS[id];
+  if (!meta.unlocked.includes(id)) {
+    const bank = store.get('salvageBank', 0);
+    if (bank < op.cost) { sfx.deny(); return; }
+    store.set('salvageBank', bank - op.cost);
+    meta.unlocked.push(id);
+    if (OP_ORDER.every(o => meta.unlocked.includes(o))) awardMedal('allops');
+    meta.save();
+    sfx.unlock();
+  }
+  meta.operator = id;
+  meta.save();
+  startRun();
+}
+
+function refreshPerks() {
+  const wrap = document.getElementById('perksWrap');
+  const bank = store.get('salvageBank', 0);
+  wrap.innerHTML = '';
+  for (const id of Object.keys(PERKS)) {
+    const p = PERKS[id], lvl = meta.perkLvl(id);
+    const cost = 50 * Math.pow(2, lvl);
+    const row = document.createElement('div');
+    row.className = 'perk-row';
+    row.innerHTML = '<div><div class="pn">' + p.name + ' ' + '\u25cf'.repeat(lvl) + '\u25cb'.repeat(p.max - lvl) + '</div>' +
+      '<div class="pd">' + p.desc + '</div></div>';
+    const b = document.createElement('button');
+    if (lvl >= p.max) { b.textContent = 'MAX'; b.disabled = true; }
+    else {
+      b.textContent = cost + ' \u2699';
+      if (bank < cost) b.disabled = true;
+      b.addEventListener('click', () => {
+        if (store.get('salvageBank', 0) < cost) return;
+        store.set('salvageBank', store.get('salvageBank', 0) - cost);
+        meta.perks[id] = lvl + 1;
+        meta.save();
+        sfx.unlock();
+        refreshPerks(); refreshBarracksHead();
+      });
+    }
+    row.appendChild(b);
+    wrap.appendChild(row);
+  }
+}
+function drawMedals() {
+  const cv = document.getElementById('medalCv');
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, cv.width, cv.height);
+  MEDALS.forEach((m, i) => {
+    const col = i % 4, row = (i / 4) | 0;
+    const x = 46 + col * 84, y = 44 + row * 100;
+    const earned = !!meta.medals[m.id];
+    g.beginPath(); g.arc(x, y, 26, 0, 7);
+    if (earned) {
+      const gr = g.createRadialGradient(x, y - 6, 4, x, y, 26);
+      gr.addColorStop(0, '#fff6d8'); gr.addColorStop(0.5, '#ffd76a'); gr.addColorStop(1, '#b8862e');
+      g.fillStyle = gr; g.fill();
+      g.strokeStyle = '#ffe9b8'; g.lineWidth = 2; g.stroke();
+      g.fillStyle = '#5c3a10';
+      g.font = '900 16px -apple-system, sans-serif'; g.textAlign = 'center';
+      g.fillText('\u2726', x, y + 6);
+    } else {
+      g.strokeStyle = 'rgba(140,150,255,.35)'; g.lineWidth = 2;
+      g.setLineDash([4, 4]); g.stroke(); g.setLineDash([]);
+      g.fillStyle = 'rgba(140,150,255,.25)';
+      g.font = '900 15px -apple-system, sans-serif'; g.textAlign = 'center';
+      g.fillText('?', x, y + 5);
+    }
+    g.fillStyle = earned ? '#ffe9b8' : '#5a6080';
+    g.font = '700 9px -apple-system, sans-serif';
+    g.fillText(m.name.toUpperCase(), x, y + 40);
+    g.fillStyle = '#4a5070';
+    g.font = '600 8px -apple-system, sans-serif';
+    g.fillText(m.desc, x, y + 51);
+  });
+}
+function refreshBarracksHead() {
+  document.getElementById('bkRank').innerHTML =
+    'RANK <b>' + meta.rank().toUpperCase() + '</b> &nbsp;\u00b7&nbsp; XP <b>' + meta.xp.toLocaleString() +
+    '</b> &nbsp;\u00b7&nbsp; SALVAGE <b>' + store.get('salvageBank', 0).toLocaleString() + '</b>';
+}
+function showBarracks(tab) {
+  refreshBarracksHead();
+  document.getElementById('perksWrap').style.display = tab === 'perks' ? 'flex' : 'none';
+  document.getElementById('medalCv').style.display = tab === 'medals' ? 'block' : 'none';
+  if (tab === 'perks') refreshPerks(); else drawMedals();
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('barracks').classList.remove('hidden');
+}
+document.getElementById('btnBarracks').addEventListener('click', () => showBarracks('perks'));
+document.getElementById('tabPerks').addEventListener('click', () => showBarracks('perks'));
+document.getElementById('tabMedals').addEventListener('click', () => showBarracks('medals'));
+document.getElementById('btnBkBack').addEventListener('click', () => { document.getElementById('barracks').classList.add('hidden'); setState('menu'); });
+
 setState('menu');
+refreshOp();
 requestAnimationFrame(frame);
 </script>
 </body>
