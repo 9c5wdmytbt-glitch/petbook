@@ -156,7 +156,11 @@
     <button class="small" id="opNext">&#9654;</button>
   </div>
   <button class="primary" id="btnDeploy">DEPLOY</button>
-  <button class="small" id="btnBarracks">BARRACKS</button>
+  <div style="display:flex;gap:10px">
+    <button class="small" id="btnDaily">DAILY OP</button>
+    <button class="small" id="btnBarracks">BARRACKS</button>
+  </div>
+  <div class="stats-line" id="dailyInfo" style="font-size:11px"></div>
   <div class="stats-line" id="menuStats"></div>
   <div class="tagline" style="font-size:11px;color:#6a7090">
     DRAG to move &middot; weapons auto-fire &middot; grab salvage to level up</div>
@@ -184,13 +188,18 @@
     <span>Salvage</span><b id="ovSalvage">0</b>
   </div>
   <button class="primary" id="btnRetry">GO AGAIN</button>
-  <button class="small" id="btnMenu">MENU</button>
+  <div style="display:flex;gap:10px">
+    <button class="small" id="btnShare">SHARE</button>
+    <button class="small" id="btnMenu">MENU</button>
+  </div>
 </div>
 
 <div class="panel hidden" id="upgrade" style="justify-content:flex-end;padding-bottom:12vh;background:rgba(5,8,16,.55)">
   <div style="font-size:13px;letter-spacing:5px;color:#ffd76a;margin-bottom:6px">FIELD PROMOTION</div>
   <div id="cards" style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:360px"></div>
 </div>
+
+<div id="toast" style="position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:rgba(20,26,48,.95);border:1px solid rgba(255,214,106,.4);padding:10px 18px;border-radius:12px;font-size:13px;letter-spacing:1px;z-index:20;opacity:0;transition:opacity .25s;pointer-events:none"></div>
 
 <div class="panel hidden" id="paused">
   <div style="font-size:22px;letter-spacing:8px;color:#dfe3ff">HOLD</div>
@@ -304,6 +313,27 @@ const RANKS = [
   ['Private', 0], ['Corporal', 300], ['Sergeant', 800], ['Lieutenant', 1600],
   ['Captain', 3000], ['Major', 5000], ['Colonel', 8000], ['Field Marshal', 12000],
 ];
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function hashStr(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+const DAILY_MODS = {
+  fog:         { name: 'Dense Fog',      desc: 'Visibility collapses' },
+  doublerush:  { name: 'Over the Top',   desc: 'Twice the rushers' },
+  nomedkit:    { name: 'Supply Cut',     desc: 'No medkit drops' },
+  salvagerush: { name: 'Salvage Rush',   desc: '+50% salvage, +20% spawns' },
+  brittle:     { name: 'Thin Ranks',     desc: 'Frailer, faster enemies' },
+};
+const MOD_ORDER = ['fog', 'doublerush', 'nomedkit', 'salvagerush', 'brittle'];
+let mode = 'endless', dailySeed = 0, dailyMod = null, dailyDate = '';
+let intensity = 1; // endless rubber-band ±20%
+const spawnLog = []; // first spawns, for determinism checks
+
 const meta = {
   unlocked: store.get('operators', ['scout']),
   operator: store.get('operator', 'scout'),
@@ -571,11 +601,13 @@ function fireWeapons(dt) {
 let spawnT = 0;
 function spawnBudget() {
   // enemies per second, escalating with run time; brief lull between waves
-  const base = 0.7 + run.t * 0.016;
+  let base = (0.7 + run.t * 0.016) * (mode === 'endless' ? intensity : 1);
+  if (dailyMod === 'salvagerush') base *= 1.2;
   return run.lull ? base * 0.25 : base * (0.6 + 0.4 * Math.min(1, run.waveT / 20));
 }
 function pickType() {
   const r = rngSpawn();
+  if (dailyMod === 'doublerush' && r < 0.5) return 'rusher';
   if (run.t > 75 && r < 0.12) return 'heavy';
   if (run.t > 40 && r < 0.38) return 'shooter';
   return 'rusher';
@@ -595,7 +627,9 @@ function spawnEnemy(type) {
   e.type = type;
   const hpMul = 1 + run.t / 110;
   e.hp = e.maxHp = spec.hp * hpMul;
+  if (dailyMod === 'brittle') { e.hp = e.maxHp = e.hp * 0.7; }
   e.r = spec.r; e.hitT = 0; e.shotT = 1 + rngSpawn() * 2;
+  if (spawnLog.length < 60) spawnLog.push(type + '@' + a.toFixed(3));
   return e;
 }
 function updateSpawning(dt) {
@@ -644,7 +678,7 @@ function killEnemy(e) {
     g.y = e.y + (Math.random() - 0.5) * 22;
     g.v = spec.gemV; g.t = 0;
   }
-  if (e.type === 'heavy' && Math.random() < 0.25) {
+  if (e.type === 'heavy' && dailyMod !== 'nomedkit' && Math.random() < 0.25) {
     const g = alloc(gems);
     if (g) { g.x = e.x; g.y = e.y; g.v = -1; g.t = 0; } // v=-1 marks a medkit
   }
@@ -658,7 +692,7 @@ function mergeGem() { // pool full: fold the oldest gem's value into a new one
 
 function gainXp(v) {
   run.xp += v;
-  run.salvage += Math.round(v * (run.salvageMul || 1));
+  run.salvage += Math.round(v * (run.salvageMul || 1) * (dailyMod === 'salvagerush' ? 1.5 : 1));
   while (run.xp >= run.xpNeed) {
     run.xp -= run.xpNeed;
     run.level++;
@@ -766,6 +800,7 @@ function update(dt) {
   if (run.inv > 0) run.inv -= gdt;
   if (run.regen) run.hp = Math.min(run.maxHp, run.hp + run.regen * gdt);
   if ((run.t | 0) !== run._medalT) { run._medalT = run.t | 0; checkRunMedals(); }
+  if (mode === 'daily' && run.t >= 300) { endRun(true); return; }
 
   /* --- player steering (drag anywhere; the stick is the world) --- */
   let tvx = 0, tvy = 0;
@@ -800,7 +835,7 @@ function update(dt) {
     if (e.hitT > 0) e.hitT -= gdt;
     let ax = player.x - e.x, ay = player.y - e.y;
     const ad = Math.hypot(ax, ay) || 1;
-    let sp = spec.speed * S;
+    let sp = spec.speed * S * (dailyMod === 'brittle' ? 1.3 : 1);
     if (e.type === 'shooter') {
       e.shotT -= gdt;
       if (ad < spec.range * S) {
@@ -914,7 +949,25 @@ function update(dt) {
 /*  Run lifecycle                                                     */
 /* ================================================================== */
 function resetRun() {
-  const op = OPERATORS[meta.operator] || OPERATORS.scout;
+  let opId = meta.operator;
+  if (mode === 'daily') {
+    dailyMod = MOD_ORDER[dailySeed % MOD_ORDER.length];
+    opId = OP_ORDER[(dailySeed >>> 3) % OP_ORDER.length]; // requisitioned for the day
+    rngSpawn = mulberry32(dailySeed);
+    rngOffer = lvl => mulberry32((dailySeed ^ Math.imul(lvl, 2654435761)) >>> 0);
+    intensity = 1;
+  } else {
+    dailyMod = null;
+    rngSpawn = Math.random;
+    rngOffer = null;
+    const recent = store.get('recent', []);
+    if (recent.length >= 2) {
+      const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
+      intensity = Math.max(0.8, Math.min(1.2, 0.8 + (avg - 75) / (210 - 75) * 0.4));
+    } else intensity = 0.85;
+  }
+  run.dailyOp = opId;
+  const op = OPERATORS[opId] || OPERATORS.scout;
   run.t = 0; run.kills = 0; run.salvage = 0; run.level = 1; run.xp = 0; run.xpNeed = 6;
   run.maxHp = Math.round(op.hp * (1 + meta.perkLvl('hp') * 0.05));
   run.hp = run.maxHp; run.inv = 0;
@@ -930,10 +983,11 @@ function resetRun() {
     for (const it of pool.items) it.alive = false;
     pool.count = 0;
   }
-  weapons = [{ id: (OPERATORS[meta.operator] || OPERATORS.scout).weapon, lvl: 1, cd: 0.4 }];
+  weapons = [{ id: op.weapon, lvl: 1, cd: 0.4 }];
   passives.speed = passives.rate = passives.magnet = passives.maxhp = 0;
-  rngSpawn = Math.random;
   spawnT = 0.8;
+  spawnLog.length = 0;
+  run.grazeWaves = 0;
   timeScale = 1; shake = 0; flash = 0; freeze = 0;
 }
 function startRun() {
@@ -941,24 +995,57 @@ function startRun() {
   setState('playing');
   sfx.deploy();
 }
-function endRun() {
-  burst(player.x, player.y, 30, 'rgba(255,214,106,1)', 320);
-  shake = 16; vibrate(120);
-  sfx.death();
+function endRun(won) {
+  if (won) { flash = 0.8; sfx.extract(); }
+  else { burst(player.x, player.y, 30, 'rgba(255,214,106,1)', 320); shake = 16; vibrate(120); sfx.death(); }
   const best = store.get('bestTime', 0);
-  const isBest = run.t > best;
+  const isBest = mode === 'endless' && run.t > best;
   if (isBest) store.set('bestTime', run.t);
   store.set('salvageBank', store.get('salvageBank', 0) + run.salvage);
   meta.xp += run.salvage;
   checkRunMedals();
   if (store.get('salvageBank', 0) >= 5000) awardMedal('bank5000');
+  run.won = !!won;
+  if (mode === 'daily') {
+    if (won) awardMedal('dailywin');
+    const key = 'daily-' + dailyDate;
+    const prev = store.get(key, null);
+    if (prev === null) { // first attempt today: streak
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      const yKey = y.getFullYear() + '-' + String(y.getMonth() + 1).padStart(2, '0') + '-' + String(y.getDate()).padStart(2, '0');
+      const streak = store.get('lastDaily', '') === yKey ? store.get('streak', 0) + 1 : 1;
+      store.set('streak', streak);
+      store.set('lastDaily', dailyDate);
+      if (streak >= 3) awardMedal('streak3');
+    }
+    if (prev === null || run.t > prev.t || (won && !prev.won)) {
+      store.set(key, { t: Math.round(run.t), won: !!won, waves: run.wave, kills: run.kills });
+    }
+  } else {
+    const recent = store.get('recent', []);
+    recent.push(Math.round(run.t));
+    while (recent.length > 5) recent.shift();
+    store.set('recent', recent);
+  }
   meta.save();
+  document.querySelector('#gameover > div').textContent = won ? 'EXTRACTED' : 'OVERRUN';
   document.getElementById('overScore').textContent = fmtTime(run.t);
-  document.getElementById('overTag').textContent = isBest ? 'LONGEST STAND' : '';
+  document.getElementById('overTag').textContent = won ? 'THE FLARE HELD' : (isBest ? 'LONGEST STAND' : '');
   document.getElementById('ovKills').textContent = run.kills;
   document.getElementById('ovLevel').textContent = run.level;
   document.getElementById('ovSalvage').textContent = '+' + run.salvage;
+  document.getElementById('btnShare').style.display = mode === 'daily' ? '' : 'none';
   setState('gameover');
+}
+
+function shareText() {
+  const waves = Math.min(run.wave, 10);
+  const row = '\u{1F7E8}'.repeat(waves) + '\u2B1B'.repeat(Math.max(0, 10 - waves));
+  return 'LAST FLARE Daily ' + dailyDate + ' \u00b7 ' + DAILY_MODS[dailyMod].name + '\n' +
+    row + '\n' +
+    (run.won ? '\u{1F3C5} EXTRACTED ' : '\u{1F480} OVERRUN ') + fmtTime(run.t) +
+    ' \u00b7 \u2694 ' + run.kills + ' kills' +
+    (store.get('streak', 0) > 1 ? ' \u00b7 \u{1F525} ' + store.get('streak', 0) + '-day streak' : '');
 }
 function fmtTime(t) { return ((t / 60) | 0) + ':' + String((t % 60) | 0).padStart(2, '0'); }
 
@@ -977,6 +1064,14 @@ function setState(s) {
       (best > 0 ? 'LONGEST STAND <b>' + fmtTime(best) + '</b> &nbsp;&middot;&nbsp; ' : '') +
       'SALVAGE <b>' + bank.toLocaleString() + '</b>';
     if (typeof refreshOp === 'function') refreshOp();
+    const seed = hashStr('lastflare-' + todayKey());
+    const modName = DAILY_MODS[MOD_ORDER[seed % MOD_ORDER.length]].name;
+    const db = store.get('daily-' + todayKey(), null);
+    const streak = store.get('streak', 0);
+    document.getElementById('dailyInfo').innerHTML =
+      'TODAY: <b>' + modName.toUpperCase() + '</b>' +
+      (db ? ' \u00b7 ' + (db.won ? 'EXTRACTED' : 'BEST ' + fmtTime(db.t)) : '') +
+      (streak > 0 ? ' \u00b7 STREAK <b>' + streak + '</b>' : '');
   }
 }
 
@@ -1171,6 +1266,14 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
+  if (dailyMod === 'fog' && state !== 'menu') {
+    const [px2, py2] = worldToScreen(player.x, player.y);
+    const fg = ctx.createRadialGradient(px2, py2, 90 * S, px2, py2, 260 * S);
+    fg.addColorStop(0, 'rgba(5,8,16,0)');
+    fg.addColorStop(1, 'rgba(5,8,16,.94)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
   if (flash > 0) {
     ctx.fillStyle = 'rgba(255,80,60,' + flash * 0.4 + ')';
     ctx.fillRect(-20, -20, W + 40, H + 40);
@@ -1265,6 +1368,7 @@ const sfx = {
   medal()     { tone(1050, 1050, 0.09, 'triangle', 0.1); tone(1560, 1560, 0.18, 'triangle', 0.1, 0.1); },
   unlock()    { tone(520, 1040, 0.2, 'triangle', 0.11); },
   deny()      { tone(200, 150, 0.15, 'square', 0.08); },
+  extract()   { tone(660, 990, 0.18, 'triangle', 0.11); tone(990, 1480, 0.3, 'triangle', 0.11, 0.2); },
   death()     { boom(0.3, 0.8); tone(400, 42, 1.0, 'sawtooth', 0.13); },
 };
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
@@ -1285,8 +1389,34 @@ function ptrUp(e) { if (e.pointerId === ptr.id) { ptr.down = false; ptr.id = nul
 stage.addEventListener('pointerup', ptrUp);
 stage.addEventListener('pointercancel', ptrUp);
 
-document.getElementById('btnDeploy').addEventListener('click', () => { unlockAudio(); tryDeploy(); });
+document.getElementById('btnDeploy').addEventListener('click', () => { unlockAudio(); mode = 'endless'; tryDeploy(); });
 document.getElementById('btnRetry').addEventListener('click', () => { unlockAudio(); startRun(); });
+document.getElementById('btnDaily').addEventListener('click', () => { unlockAudio(); startDaily(todayKey()); });
+document.getElementById('btnShare').addEventListener('click', async () => {
+  const text = shareText();
+  try {
+    if (navigator.share) { await navigator.share({ text }); return; }
+    await navigator.clipboard.writeText(text);
+    toast('Copied to clipboard');
+  } catch (e) { toast('Result ready'); }
+});
+let toastT = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = 1;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { t.style.opacity = 0; }, 1800);
+}
+function startDaily(dateStr) {
+  dailyDate = dateStr;
+  dailySeed = hashStr('lastflare-' + dateStr);
+  mode = 'daily';
+  startRun();
+  const op = OPERATORS[run.dailyOp];
+  popup(player.x, player.y - 40, DAILY_MODS[dailyMod].name.toUpperCase(), '#ffd76a');
+  popup(player.x, player.y - 60, 'OPERATOR: ' + op.name.toUpperCase(), '#9aa0c8');
+}
 document.getElementById('btnMenu').addEventListener('click', () => setState('menu'));
 document.getElementById('pauseBtn').addEventListener('click', e => {
   e.stopPropagation();
@@ -1298,6 +1428,9 @@ document.getElementById('muteBtn').addEventListener('click', e => {
   e.currentTarget.innerHTML = muted ? '&#128263;' : '&#128266;';
 });
 document.getElementById('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;';
+document.getElementById('paused').addEventListener('pointerdown', () => {
+  if (state === 'paused') setState('playing');
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state === 'playing') setState('paused');
 });
@@ -1338,6 +1471,11 @@ window.__lastflare = {
   offers: () => pendingOffers.map(o => o.kind + ':' + o.id + ':' + o.lvl),
   pick: i => pickUpgrade(i),
   zonesCount: () => zones.count,
+  mode: () => ({ mode, dailyDate, dailyMod, intensity, dailyOp: run.dailyOp }),
+  startDaily: d => startDaily(d),
+  spawnLog: () => spawnLog.slice(),
+  shareText: () => (mode === 'daily' ? shareText() : ''),
+  winNow: () => { if (state === 'playing' && mode === 'daily') endRun(true); },
   meta: () => ({ unlocked: meta.unlocked.slice(), operator: meta.operator, perks: { ...meta.perks },
                  medals: Object.keys(meta.medals), xp: meta.xp, rank: meta.rank(),
                  bank: store.get('salvageBank', 0) }),
