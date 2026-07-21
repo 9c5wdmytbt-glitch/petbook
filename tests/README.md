@@ -32,5 +32,5 @@ attempted.
 
 `node tune.js [seconds]` runs a bot-driven STARSHELL session (default 200s) and
 prints balance numbers: survival, graze-combo attainment, CLOSE CALL rate on
-aggressive novas, and spawn-rate relief during wave lulls. It is not part of
+aggressive bursts, and spawn-rate relief during wave lulls. It is not part of
 `npm test`.

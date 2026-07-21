@@ -26,7 +26,7 @@ Date: 2026-07-21 (updated after the IP-clean rework)
 - **Audio:** Web Audio API, fully synthesised (oscillators + generated noise);
   unlocked on first user gesture.
 - **Input:** Touch (swipe + d-pad in TRENCHFOX), Pointer events (drag steering,
-  second-finger / double-tap nova in STARSHELL), keyboard fallback, vibration
+  second-finger / double-tap shell fire in STARSHELL), keyboard fallback, vibration
   haptics where supported.
 - **Backend / database / ORM:** None. No server-side code.
 - **Testing:** committed Playwright smoke suite in `tests/` (playwright-core,
@@ -62,8 +62,8 @@ Date: 2026-07-21 (updated after the IP-clean rework)
   (~24s build / ~6.5s lull cycles, each wave peaking higher; swifts from wave 2,
   hunters from wave 3); hunters attack in telegraphed cycles (stalk → 0.4s
   flare + audio wind-up with hard braking → straight lunge locked at launch →
-  cooldown); graze ring charges the nova, with a rolling-1.5s graze combo
-  scaling charge ×1→×2.5; CLOSE CALL bonus (nova fired with an enemy inside
+  cooldown); graze ring charges the shell, with a rolling-1.5s graze combo
+  scaling charge ×1→×2.5; CLOSE CALL bonus (shell fired with an enemy inside
   ~1.5× graze ring: chain starts at 200, feast +20% longer); chain scoring
   100→1600; seeded daily challenge with streaks; share card.
 - **Authentication / authorisation:** None. No accounts, no PII.
@@ -107,7 +107,7 @@ in production; used by the QA suite.
   inherent to any client-only game (scores are per-device, not authoritative).
 
 ## 8. Testing & Quality
-- **Committed:** `tests/` Playwright suite (`npm test`) — trenchfox, nova, hub, pwa;
+- **Committed:** `tests/` Playwright suite (`npm test`) — trenchfox, starshell, hub, pwa;
   all green. Serves the repo root from a separate server process; every test
   fails on any console/page error. `tests/tune.js` runs bot-driven balance
   sessions.
@@ -140,7 +140,7 @@ in production; used by the QA suite.
      needs 4 grazes in rolling 1.5s windows across ≥3 distinct shades (0.9s
      per-shade cooldown). Options: widen window to ~2s, cut per-shade cooldown
      to ~0.6s, or accept ×2.5 as aspirational.
-  2. CLOSE CALL is deterministic for deliberate point-blank novas (5/5) and
+  2. CLOSE CALL is deterministic for deliberate point-blank bursts (5/5) and
      ~1-in-5 incidental. If a 1-in-3..1-in-5 rate for aggressive-but-imperfect
      play is preferred, shrink the danger radius ~20%.
   3. Wave lull reads as a ~36% spawn-rate drop; if human play wants more

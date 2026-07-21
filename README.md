@@ -10,7 +10,6 @@
 ([`index.html`](index.html)) with launch buttons for both games. Direct links:
 [STARSHELL](https://9c5wdmytbt-glitch.github.io/petbook/starshell.html) ·
 [TRENCHFOX](https://9c5wdmytbt-glitch.github.io/petbook/trenchfox.html)
-_(links go live once GitHub Pages is enabled)_
 
 ## STARSHELL (mobile)
 
