@@ -2,9 +2,9 @@
 Date: 2026-07-20 (updated after batch 2)
 
 ## 1. Purpose & Business Context
-- A mobile-first browser arcade containing two complete games: a faithful Pac-Man
-  recreation and **NOVA**, an original arcade game that modernises the Pac-Man
-  loop (hunted → charge a power-up → reversal → feast) for today's players.
+- A mobile-first browser arcade containing two complete games: **TRENCHFOX**, an original
+  trench-network maze-chase, and **NOVA**, an original arena game built on a
+  hunted → charge → reversal → feast loop.
   Everything is plain HTML/CSS/JavaScript with zero dependencies and zero build
   step — each game is one self-contained file that runs in any modern browser.
 - Target users: casual mobile players. One-thumb play (swipe / drag / d-pad),
@@ -25,7 +25,7 @@ Date: 2026-07-20 (updated after batch 2)
   NOVA's look.
 - **Audio:** Web Audio API, fully synthesised (oscillators + generated noise);
   unlocked on first user gesture.
-- **Input:** Touch (swipe + d-pad in Pac-Man), Pointer events (drag steering,
+- **Input:** Touch (swipe + d-pad in TRENCHFOX), Pointer events (drag steering,
   second-finger / double-tap nova in NOVA), keyboard fallback, vibration
   haptics where supported.
 - **Backend / database / ORM:** None. No server-side code.
@@ -43,7 +43,7 @@ Date: 2026-07-20 (updated after batch 2)
   `<a href>` navigation from the hub.
 - Directory structure:
   - `index.html` — arcade hub / launcher with LAUNCH buttons for both games
-  - `pacman.html` — complete Pac-Man (~960 lines)
+  - `trenchfox.html` — complete TRENCHFOX (~1150 lines)
   - `nova.html` — complete NOVA (~990 lines)
   - `tests/` — QA suite (static server, three smoke tests, tuning harness, README)
   - `.github/workflows/pages.yml` — Pages deploy workflow
@@ -51,12 +51,13 @@ Date: 2026-07-20 (updated after batch 2)
   - `README.md`, `PROJECT_BRIEF.md` — docs
 - **Game loop (both):** single rAF loop → `update(dt)` (input → movement →
   collisions → state machine) → `draw()` → DOM HUD sync.
-- **Pac-Man specifics:** 28×31 string-map maze; tile-centre grid movement with
+- **TRENCHFOX specifics:** three generated 28×31 trench layouts rotating per sector; tile-centre grid movement with
   buffered turns plus late-swipe corner forgiveness (a perpendicular swipe up
   to ~half a tile after an intersection executes retroactively, overshoot
-  carried into the turn); authentic four-ghost AI (chase/ambush/flank/shy,
-  scatter-chase schedule, frightened, eyes-return); death opens with a 0.5s
-  full freeze; level clear = ghosts vanish + 4-5 wall flashes in 2.0s.
+  carried into the turn); four hunters (HOUND direct / VIPER ahead /
+  SHADOW flank / STRAY erratic) on a scatter-chase schedule; signal flares
+  expose the hunt, routed hunters regroup at the dugout; death opens with a
+  0.5s full freeze; sector clear = hunters vanish + flare-wash flashes in 2.0s.
 - **NOVA specifics:** continuous-space steering; wave-based difficulty
   (~24s build / ~6.5s lull cycles, each wave peaking higher; swifts from wave 2,
   hunters from wave 3); hunters attack in telegraphed cycles (stalk → 0.4s
@@ -69,7 +70,7 @@ Date: 2026-07-20 (updated after batch 2)
 
 ## 4. Data Model
 No database. All persistence is browser `localStorage`, per-device:
-- Pac-Man: `pacman-high` (int), `pacman-muted` ('1'/'0')
+- TRENCHFOX: `trenchfox-high` (int), `trenchfox-muted` ('1'/'0')
 - NOVA (JSON via a `store` wrapper, `nova-` prefix): `nova-best`, `nova-muted`,
   `nova-streak`, `nova-lastDaily` (YYYY-MM-DD), `nova-daily-<YYYY-MM-DD>`
   (per-day best; yesterday's value feeds the menu display)
@@ -77,9 +78,9 @@ No database. All persistence is browser `localStorage`, per-device:
 ## 5. Features — Current State
 | Feature | Status | Notes |
 |---|---|---|
-| Pac-Man: maze, pellets, fruit, tunnel, 4-ghost AI, levels | Done | Covered by tests/pacman.test.js |
-| Pac-Man: swipe + d-pad + keyboard, late-swipe corner forgiveness | Done | Corner cut asserted to snap to corridor centre |
-| Pac-Man: 0.5s death freeze, level-clear flash celebration | Done | Timing + pixel-sampled in tests |
+| TRENCHFOX: 3 rotating trench layouts, dispatches, flares, 4 hunters | Done | Covered by tests/trenchfox.test.js |
+| TRENCHFOX: swipe + d-pad + keyboard, late-swipe corner forgiveness | Done | Corner cut asserted to snap to corridor centre |
+| TRENCHFOX: 0.5s death freeze, sector-clear flare wash | Done | Timing asserted in tests |
 | NOVA: steering, motes, combos, graze ring | Done | |
 | NOVA: graze combo (×1→×2.5 charge) with HUD readout | Done | ×2.5 never observed in bot play — see §10 |
 | NOVA: CLOSE CALL bonus + flourish | Done | 5/5 on deliberate point-blank dives, 1/5 incidental |
@@ -93,7 +94,7 @@ No database. All persistence is browser `localStorage`, per-device:
 
 ## 6. API Surface
 Not applicable — static pages only. Each game exposes a debug hook
-(`window.__pacman`, `window.__nova`) with read-only snapshots and test-only
+(`window.__trenchfox`, `window.__nova`) with read-only snapshots and test-only
 triggers (press/kill/winLevel; charge/boom/kill/spawnHunter/spawns). Harmless
 in production; used by the QA suite.
 
@@ -106,7 +107,7 @@ in production; used by the QA suite.
   inherent to any client-only game (scores are per-device, not authoritative).
 
 ## 8. Testing & Quality
-- **Committed:** `tests/` Playwright suite (`npm test`) — pacman, nova, hub;
+- **Committed:** `tests/` Playwright suite (`npm test`) — trenchfox, nova, hub, pwa;
   all green. Serves the repo root from a separate server process; every test
   fails on any console/page error. `tests/tune.js` runs bot-driven balance
   sessions.
@@ -128,7 +129,7 @@ in production; used by the QA suite.
   (see `tests/README.md`).
 - **Deployment:** push to `main` → Pages workflow deploys the repo root →
   live at `https://9c5wdmytbt-glitch.github.io/petbook/` (hub), with
-  `/pacman.html` and `/nova.html` direct. `tests/` deploys as inert static
+  `/trenchfox.html` and `/nova.html` direct. `tests/` deploys as inert static
   files. Note: the `github-pages` environment only accepts deploys from the
   default branch (`main`).
 
@@ -153,8 +154,8 @@ in production; used by the QA suite.
 Recent work (batch 2, newest first — one commit per item):
 1. `b4f6742` tests: pointer-helper + tuning-harness measurement fixes
 2. `f4f19dd` committed QA suite under `tests/`
-3. `fde0f41` Pac-Man level-clear celebration
-4. `177a0e9` Pac-Man half-second death freeze
+3. `fde0f41` maze game level-clear celebration
+4. `177a0e9` maze game half-second death freeze
 5. `8b2f190` NOVA wave-based difficulty pacing
 6. `6df94fb` NOVA telegraphed hunter lunges
 Earlier (batch 1): corner forgiveness, graze combo, CLOSE CALL, daily hook;

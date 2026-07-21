@@ -45,10 +45,11 @@
   }
   .card-head { display: flex; align-items: center; gap: 14px; }
   .icon { width: 46px; height: 46px; flex: none; border-radius: 50%; }
-  .icon.pac {
-    background: conic-gradient(from 55deg, transparent 0 70deg, #ffd23f 70deg 360deg);
-    box-shadow: 0 0 26px rgba(255,210,63,.45);
-    transform: scaleX(-1);
+  .icon.fox {
+    background: linear-gradient(135deg, #e08a3c, #a34f1f);
+    clip-path: polygon(0% 18%, 100% 50%, 0% 82%);
+    border-radius: 0;
+    filter: drop-shadow(0 0 12px rgba(224,138,60,.55));
   }
   .icon.nova {
     background: radial-gradient(circle at 50% 50%, #fff6d8 0 26%, #ffd76a 40%, rgba(255,154,61,.55) 62%, transparent 72%);
@@ -94,15 +95,15 @@
     </div>
     <div class="card ghost-theme">
       <div class="card-head">
-        <div class="icon pac"></div>
+        <div class="icon fox"></div>
         <div>
-          <h2>PAC-MAN</h2>
-          <div class="sub">CLASSIC &middot; SWIPE OR D-PAD</div>
+          <h2>TRENCHFOX</h2>
+          <div class="sub">TRENCH RUNNER &middot; SWIPE OR D-PAD</div>
         </div>
       </div>
-      <p>The 1980 arcade legend, rebuilt for your phone. Eat every dot, dodge four
-         ghosts with real chase AI, and grab a power pellet to bite back.</p>
-      <a class="launch" href="pacman.html">&#9654;&nbsp; LAUNCH</a>
+      <p>Run the night trenches as the Fox, a dispatch runner hunted by four
+         distinct pursuers. Send up a signal flare and the hunt turns prey.</p>
+      <a class="launch" href="trenchfox.html">&#9654;&nbsp; LAUNCH</a>
     </div>
   </main>
   <footer>NO INSTALL &middot; NO ACCOUNT &middot; PLAYS OFFLINE ONCE LOADED</footer>

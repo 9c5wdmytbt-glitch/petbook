@@ -90,16 +90,23 @@ const { BASE_URL, launch, installPointer, assert, finish } = require('./lib');
         const prey = window.__nova.shadePos().filter(x => x.fright && !x.warn);
         if (!prey.length) return;
         prey.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
-        window.__send(prey[0].x, prey[0].y);
+        // intercept: prey flees directly away, so aim past it along the flee line
+        const t = prey[0];
+        const dx = t.x - p.x, dy = t.y - p.y, d = Math.hypot(dx, dy) || 1;
+        window.__send(t.x + dx / d * 70, t.y + dy / d * 70);
       } else if (s.meter >= 1) {
         // dive at the nearest slow shade (player outruns 'shade' types) and
         // fire only point-blank so a catchable prey is guaranteed
         const hostiles = window.__nova.shadePos().filter(x => !x.warn && !x.fright);
         const slows = hostiles.filter(x => x.type === 'shade');
-        const near = (slows.length ? slows : hostiles)
+        // prefer slow shades near mid-field so the fleeing prey stays catchable
+        const central = (slows.length ? slows : hostiles)
+          .filter(x => Math.hypot(x.x - 195, x.y - 422) < 300);
+        const pool = central.length ? central : (slows.length ? slows : hostiles);
+        const near = pool
           .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
         if (!near) return;
-        if (Math.hypot(near.x - p.x, near.y - p.y) < 160) { window.__nova.boom(); return; }
+        if (Math.hypot(near.x - p.x, near.y - p.y) < 90) { window.__nova.boom(); return; }
         window.__send(near.x, near.y);
       }
     }, 60);

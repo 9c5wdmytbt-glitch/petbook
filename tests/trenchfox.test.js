@@ -1,0 +1,161 @@
+'use strict';
+/* TRENCHFOX smoke test: boot, input, scoring, corner forgiveness, flare
+   exposure, death freeze, all three maze layouts (rotation + integrity),
+   pause — and zero console errors. */
+const { BASE_URL, launch, assert, finish } = require('./lib');
+
+/* Node-side maze integrity: every dispatch/flare reachable from spawn. */
+function checkMaze(rows, label) {
+  assert(rows.length === 31 && rows.every(r => r.length === 28), label + ': 28x31');
+  assert(rows[12][13] === '-' && rows[12][14] === '-', label + ': dugout gate present');
+  assert(rows[14][0] !== '#' && rows[14][27] !== '#', label + ': crawl-through open');
+  const seen = Array.from({ length: 31 }, () => new Array(28).fill(false));
+  const pass = (r, c) => {
+    if (r === 14 && (c < 0 || c >= 28)) return true;
+    return r >= 0 && r < 31 && c >= 0 && c < 28 && rows[r][c] !== '#' && rows[r][c] !== '-';
+  };
+  const q = [[23, 13]];
+  seen[23][13] = true;
+  while (q.length) {
+    const [r, c] = q.pop();
+    for (const [dr, dc] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      let nr = r + dr, nc = c + dc;
+      if (nr === 14) nc = (nc + 28) % 28;
+      if (pass(nr, nc) && !seen[nr][nc]) { seen[nr][nc] = true; q.push([nr, nc]); }
+    }
+  }
+  let pellets = 0;
+  for (let r = 0; r < 31; r++) for (let c = 0; c < 28; c++) {
+    if (rows[r][c] === '.' || rows[r][c] === 'o') {
+      pellets++;
+      assert(seen[r][c], label + ': unreachable pellet at ' + r + ',' + c);
+    }
+  }
+  assert(pellets > 100, label + ': enough dispatches (' + pellets + ')');
+}
+
+(async () => {
+  const { browser, page, errors } = await launch();
+  await page.goto(BASE_URL + '/trenchfox.html');
+  await page.waitForTimeout(500);
+
+  let snap = await page.evaluate(() => window.__trenchfox.snapshot());
+  assert(snap.state === 'start', 'boots to start screen');
+  assert(snap.dots > 100, 'dispatches loaded');
+
+  await page.touchscreen.tap(195, 400);
+  await page.waitForTimeout(300);
+  snap = await page.evaluate(() => window.__trenchfox.snapshot());
+  assert(snap.state === 'ready', 'tap starts READY');
+
+  // Layout-agnostic late-swipe corner cut: while the Fox runs horizontally,
+  // press a legal perpendicular turn just after a tile centre and confirm the
+  // retroactive cut (snap to corridor centre, overshoot carried).
+  const cut = await page.evaluate(() => new Promise(resolve => {
+    const maze = window.__trenchfox.maze();
+    const pass = (r, c) => r >= 0 && r < 31 && c >= 0 && c < 28 && maze[r][c] !== '#' && maze[r][c] !== '-';
+    let pressed = null;
+    const iv = setInterval(() => {
+      const s = window.__trenchfox.snapshot();
+      if (s.state !== 'playing') return;
+      const p = s.pac;
+      if (pressed) {
+        if (Math.abs(p.x - pressed.cx - 0.5) < 0.03 && Math.abs(p.y - pressed.row - 0.5) > 0.05) {
+          clearInterval(iv); resolve({ ok: true, ...pressed });
+        }
+        if (Math.abs(p.x - pressed.cx - 0.5) > 2.5) pressed = null; // sailed by; rearm
+        return;
+      }
+      const onRow = Math.abs(p.y - Math.floor(p.y) - 0.5) < 1e-3;
+      if (!onRow) return;
+      const row = Math.floor(p.y);
+      // moving horizontally with a small overshoot past a centre?
+      const fx = p.x - 0.5;
+      const cx = Math.round(fx);
+      const o = fx - cx;
+      if (Math.abs(o) < 0.08 || Math.abs(o) > 0.38) return;
+      for (const [dname, dr] of [['up', -1], ['down', 1]]) {
+        if (pass(row + dr, cx)) {
+          pressed = { cx, row, dname };
+          window.__trenchfox.press(dname);
+          return;
+        }
+      }
+    }, 8);
+    setTimeout(() => { clearInterval(iv); resolve({ ok: false }); }, 10000);
+  }));
+  assert(cut.ok, 'late swipe corner cut executes (' + JSON.stringify(cut) + ')');
+
+  // dispatches are spaced along the trenches — run around for a bit
+  await page.evaluate(() => new Promise(resolve => {
+    const dirs = ['up', 'down', 'left', 'right'];
+    let n = 0;
+    const iv = setInterval(() => {
+      window.__trenchfox.press(dirs[(Math.random() * 4) | 0]);
+      if (++n > 16) { clearInterval(iv); resolve(); }
+    }, 180);
+  }));
+  snap = await page.evaluate(() => window.__trenchfox.snapshot());
+  assert(snap.score > 0, 'grabbing dispatches scores');
+
+  // Flare: hunters exposed (fright), timer runs
+  await page.evaluate(() => window.__trenchfox.flare());
+  await page.waitForTimeout(200);
+  snap = await page.evaluate(() => window.__trenchfox.snapshot());
+  assert(snap.frightTimer > 0, 'flare starts the exposure window');
+  const active = snap.ghosts.filter(g => g.state === 'active');
+  assert(active.length > 0 && active.every(g => g.fright), 'active hunters exposed by the flare');
+  await page.waitForTimeout(2500);
+
+  // Death: 0.5s freeze then sequence, ~2.6s total, hunters immobile
+  const death = await page.evaluate(() => new Promise(resolve => {
+    const g0 = JSON.stringify(window.__trenchfox.snapshot().ghosts.map(g => [g.x, g.y]));
+    window.__trenchfox.kill();
+    const t0 = performance.now();
+    let frozen = true;
+    const iv = setInterval(() => {
+      const t = performance.now() - t0;
+      const s = window.__trenchfox.snapshot();
+      if (s.state === 'dying' &&
+          JSON.stringify(s.ghosts.map(g => [g.x, g.y])) !== g0) frozen = false;
+      if (s.state !== 'dying') { clearInterval(iv); resolve({ t, frozen, lives: s.lives, state: s.state }); }
+      if (t > 4000) { clearInterval(iv); resolve({ timeout: true }); }
+    }, 60);
+  }));
+  assert(!death.timeout, 'death sequence ends');
+  assert(death.t > 2400 && death.t < 2900, 'death ~2.6s incl. freeze, got ' + Math.round(death.t));
+  assert(death.frozen, 'hunters frozen through death');
+  assert(death.lives === 2, 'a life is lost');
+
+  await page.waitForTimeout(2000);
+
+  // All three sectors: rotation, refill, and per-layout integrity
+  const seenMazes = [];
+  for (let i = 0; i < 3; i++) {
+    const info = await page.evaluate(() => ({
+      maze: window.__trenchfox.maze(),
+      snap: window.__trenchfox.snapshot(),
+    }));
+    seenMazes.push(info);
+    checkMaze(info.maze, 'sector ' + info.snap.level + ' (maze ' + info.snap.mazeIndex + ')');
+    if (i < 2) {
+      await page.evaluate(() => window.__trenchfox.winLevel());
+      await page.waitForTimeout(4300);
+    }
+  }
+  const idxs = seenMazes.map(m => m.snap.mazeIndex);
+  assert(new Set(idxs).size === 3, 'three distinct layouts rotate: ' + idxs.join(','));
+  assert(seenMazes[2].snap.dots > 100, 'dispatches refilled each sector');
+
+  // Pause / resume
+  await page.click('#btnPause');
+  await page.waitForTimeout(150);
+  snap = await page.evaluate(() => window.__trenchfox.snapshot());
+  assert(snap.state === 'paused', 'pause works');
+  await page.click('#btnPause');
+  await page.waitForTimeout(150);
+  snap = await page.evaluate(() => window.__trenchfox.snapshot());
+  assert(snap.state === 'playing', 'resume works');
+
+  await finish(browser, errors, 'trenchfox.test');
+})().catch(e => { console.error('FAIL trenchfox.test:', e.message); process.exit(1); });

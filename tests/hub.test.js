@@ -16,7 +16,7 @@ const { BASE_URL, launch, assert, finish } = require('./lib');
 
   await page.tap('a.launch >> nth=1');
   await page.waitForTimeout(400);
-  assert((await page.title()) === 'Pac-Man', 'second LAUNCH opens Pac-Man');
+  assert((await page.title()) === 'TRENCHFOX', 'second LAUNCH opens TRENCHFOX');
 
   await finish(browser, errors, 'hub.test');
 })().catch(e => { console.error('FAIL hub.test:', e.message); process.exit(1); });

@@ -1,7 +1,7 @@
 # Petbook Arcade — QA suite
 
 Playwright smoke tests for both games and the hub, driven through the games'
-built-in debug hooks (`window.__pacman`, `window.__nova`).
+built-in debug hooks (`window.__trenchfox`, `window.__nova`).
 
 ## Run
 
@@ -14,8 +14,9 @@ CHROMIUM_PATH=/path/to/chrome-or-chromium npm test
 `npm test` starts a static server for the repo root on `127.0.0.1:8123`
 (override with `PORT`) and runs every `*.test.js` in sequence:
 
-- `pacman.test.js` — boot, input, scoring, late-swipe corner cut, death
-  freeze, level-clear celebration, pause/resume
+- `trenchfox.test.js` — boot, input, scoring, late-swipe corner cut, flare
+  exposure, death freeze, all three maze layouts (rotation + reachability),
+  pause/resume
 - `nova.test.js` — boot, steering, scoring, hunter telegraph, nova + chain,
   death, retry, daily mode, `nova-` storage-key hygiene
 - `hub.test.js` — hub launch buttons navigate to both games

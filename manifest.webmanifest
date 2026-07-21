@@ -1,7 +1,7 @@
 {
   "name": "Petbook Arcade",
   "short_name": "Arcade",
-  "description": "Pac-Man and NOVA — mobile arcade games. No install, no account, plays offline.",
+  "description": "TRENCHFOX and NOVA — mobile arcade games. No install, no account, plays offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
